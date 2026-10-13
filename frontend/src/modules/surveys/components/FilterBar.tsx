@@ -1,0 +1,107 @@
+import type { ReactNode } from 'react';
+import type { Branch, Cashier, Filters, Register } from '../../../lib/types';
+import Select from '../../../components/Select';
+import DatePicker from '../../../components/DatePicker';
+
+interface Props {
+  filters: Filters;
+  onChange: (filters: Filters) => void;
+  branches: Branch[];
+  registers: Register[];
+  cashiers: Cashier[];
+  children?: ReactNode;
+}
+
+const labelCls = 'mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-muted';
+
+export default function FilterBar({ filters, onChange, branches, registers, cashiers, children }: Props) {
+  const set = (patch: Partial<Filters>) => onChange({ ...filters, ...patch });
+
+  const hasFilters =
+    filters.branch_id || filters.register_id || filters.cashier_id || filters.from || filters.to;
+
+  const registerOptions = (
+    filters.branch_id
+      ? registers.filter((r) => String(r.branch_id) === filters.branch_id)
+      : registers
+  ).map((r) => ({ value: r.id, label: r.name }));
+  const cashierOptions = (
+    filters.branch_id
+      ? cashiers.filter((c) => String(c.branch_id) === filters.branch_id)
+      : cashiers
+  ).map((c) => ({ value: c.id, label: c.name }));
+
+  return (
+    <div className="card animate-fade-in p-4 sm:p-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div>
+          <label className={labelCls}>Sucursal</label>
+          <Select
+            value={filters.branch_id}
+            onChange={(v) => set({ branch_id: v, register_id: '', cashier_id: '' })}
+            placeholder="Todas"
+            options={branches.map((b) => ({ value: b.id, label: b.name }))}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Caja</label>
+          <Select
+            value={filters.register_id}
+            onChange={(v) => set({ register_id: v })}
+            placeholder="Todas"
+            options={registerOptions}
+            disabled={registerOptions.length === 0}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Cajero(a)</label>
+          <Select
+            value={filters.cashier_id}
+            onChange={(v) => set({ cashier_id: v })}
+            placeholder="Todos"
+            options={cashierOptions}
+            disabled={cashierOptions.length === 0}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Desde</label>
+          <DatePicker
+            value={filters.from}
+            onChange={(v) => set({ from: v })}
+            max={filters.to || undefined}
+            placeholder="Desde"
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Hasta</label>
+          <DatePicker
+            value={filters.to}
+            onChange={(v) => set({ to: v })}
+            min={filters.from || undefined}
+            placeholder="Hasta"
+          />
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+        <button
+          onClick={() => set({ branch_id: '', register_id: '', cashier_id: '', from: '', to: '' })}
+          disabled={!hasFilters}
+          className="btn-soft h-[38px] px-4 text-[13px]"
+        >
+          Limpiar
+        </button>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function defaultFilters(): Filters {
+  const d = new Date();
+  const from = new Date(d);
+  from.setDate(from.getDate() - 30);
+  const p = (n: number) => String(n).padStart(2, '0');
+  const fmt = (x: Date) => `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
+  return { branch_id: '', register_id: '', cashier_id: '', from: fmt(from), to: fmt(d) };
+}
