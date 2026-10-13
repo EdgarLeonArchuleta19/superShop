@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="frontend/assets/logo-tienda.jpg" alt="superShop" width="110" />
-
 # superShop
 
 ### Plataforma de gestión para tiendas de abarrotes, conveniencia y supermercados
