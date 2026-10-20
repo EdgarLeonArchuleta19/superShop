@@ -7,7 +7,10 @@ import { CLOUD, db } from './db.js';
  * Con la opción activa (Ajustes → Vincular dispositivos), quien no tenga el enlace solo ve
  * una página fija de SuperShop (como el panel azul del login); todo lo demás (login, panel,
  * API) responde "no encontrado". Al abrir https://…/?acceso=<clave> el servidor guarda en
- * ese navegador una cookie privada (un año) y redirige a la misma página sin la clave.
+ * ese navegador una cookie privada y redirige a la misma página sin la clave. La cookie se
+ * renueva cada vez que se usa la app, así que no vence: solo deja de servir cuando se
+ * genera un enlace nuevo (o si el dispositivo no abre la app en más de 400 días, el
+ * máximo que permiten los navegadores).
  *
  * Siempre pasan /api/health (Render y UptimeRobot) y la ventana de la app de escritorio
  * (conexión directa desde esta computadora, sin pasar por el túnel).
@@ -16,6 +19,7 @@ import { CLOUD, db } from './db.js';
 
 export const ACCESS_PARAM = 'acceso';
 const COOKIE = 'ss_acceso';
+/** 400 días: el máximo que aceptan los navegadores. Se renueva con el uso. */
 const MAX_AGE_S = 400 * 24 * 3600;
 const CACHE_MS = 30 * 1000;
 const FORCE_OFF = process.env.ACCESS_GATE_DISABLED === 'true';
@@ -160,7 +164,14 @@ export function accessGate(req, res, next) {
     res.setHeader('Cache-Control', 'no-store');
     return res.redirect(302, url.pathname + url.search);
   }
-  if (same(readCookie(req), c.key)) return next();
+  if (same(readCookie(req), c.key)) {
+    // Renovar al abrir la app: una página, o /api/settings (la app instalada se abre desde
+    // su copia guardada y lo primero que pide al servidor son los ajustes).
+    if (req.method === 'GET' && (req.path === '/api/settings' || !/^\/(api|assets)\//.test(req.path))) {
+      grantAccess(req, res, c.key);
+    }
+    return next();
+  }
 
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   res.setHeader('Cache-Control', 'no-store');

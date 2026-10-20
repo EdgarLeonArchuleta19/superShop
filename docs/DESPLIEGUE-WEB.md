@@ -148,7 +148,7 @@ Con esto, quien entre a `app.supershop-mx.com` sin el enlace solo ve una página
 1. Entra como **Administrador** a **Ajustes → Vincular dispositivos**.
 2. En la tarjeta del QR, activa **Acceso privado**. La dirección y el QR de esa tarjeta cambian al enlace privado.
 3. Copia el enlace (`https://app.supershop-mx.com/?acceso=…`) y guárdalo en un lugar seguro.
-4. En cada celular, tablet o computadora del personal, abre el enlace o escanea ese QR. Basta una vez: el dispositivo queda autorizado por un año.
+4. En cada celular, tablet o computadora del personal, abre el enlace o escanea ese QR. Basta una vez: el dispositivo queda autorizado y no vence mientras use la app; solo deja de servir si generas un enlace nuevo.
 
 - **Si el enlace llegó a quien no debía:** pulsa **Generar enlace nuevo**. El anterior deja de servir y todos los dispositivos, menos el tuyo, tendrán que abrir el nuevo.
 - **iPhone con la app instalada en la pantalla de inicio:** si al abrirla aparece la página pública, abre el enlace privado en Safari, borra la app de la pantalla de inicio y vuelve a instalarla desde ahí.

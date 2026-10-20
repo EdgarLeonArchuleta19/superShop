@@ -70,7 +70,7 @@ Todas las versiones notables documentadas aquí. Formato basado en [Keep a Chang
 ### 🔒 Seguridad
 - **Acceso solo con enlace privado** (interruptor en la tarjeta del QR de Ajustes → Vincular dispositivos, solo Administrador):
   - Sin el enlace solo se ve una página de presentación fija de SuperShop (como el panel azul del login); el login, el panel y la API responden "no encontrado".
-  - Abrir el enlace (o escanear el QR, que ya lo incluye) autoriza el dispositivo por un año.
+  - Abrir el enlace (o escanear el QR, que ya lo incluye) autoriza el dispositivo; la autorización se renueva con el uso y solo deja de servir al generar un enlace nuevo.
   - "Generar enlace nuevo" revoca el anterior.
   - La ventana de escritorio siempre entra, y `ACCESS_GATE_DISABLED=true` lo apaga en caso de emergencia.
   - El kiosko conserva sus encuestas si pierde el acceso y las envía al recuperarlo.

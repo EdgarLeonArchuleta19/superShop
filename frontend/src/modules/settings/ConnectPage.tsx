@@ -894,7 +894,7 @@ function PrivateAccess({
             </p>
             <p className="text-[12px] text-muted">
               {access.enabled
-                ? 'Solo entra quien abra este enlace o escanee este QR (una vez por dispositivo). Los demás ven una página de presentación, sin inicio de sesión.'
+                ? 'Solo entra quien abra este enlace o escanee este QR (una vez por dispositivo; no vence, solo cambia si generas un enlace nuevo). Los demás ven una página de presentación, sin inicio de sesión.'
                 : 'Actívalo para que solo entre quien tenga el enlace o escanee este QR. Los demás verán una página de presentación, sin inicio de sesión.'}
             </p>
           </div>
