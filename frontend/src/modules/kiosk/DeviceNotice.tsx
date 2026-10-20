@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom';
 import StoreLogo from '../../components/StoreLogo';
 import { IconAlert, IconTablet } from '../../components/Icons';
 import { forgetDevice } from '../../lib/device';
@@ -29,7 +28,6 @@ const TEXT: Record<Props['status'], { title: string; body: string }> = {
 /** Pantalla de la tablet cuando no puede mostrar encuestas. */
 export default function DeviceNotice({ status, pending }: Props) {
   const { settings, logo } = useSettings();
-  const navigate = useNavigate();
   const text = TEXT[status];
 
   return (
@@ -62,7 +60,8 @@ export default function DeviceNotice({ status, pending }: Props) {
           <button
             onClick={() => {
               forgetDevice();
-              navigate('/login', { replace: true });
+              // Carga completa: /login usa index.html (app SuperShop), no la de encuestas.
+              window.location.replace('/login');
             }}
             className="mt-5 text-[13px] font-semibold text-brand-600 underline-offset-2 hover:underline"
           >

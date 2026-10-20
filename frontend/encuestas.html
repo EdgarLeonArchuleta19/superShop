@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <!-- SuperShop Survey: entrada de las tablets de encuestas (/encuestas). Misma app que
+         index.html, pero con su propio manifiesto, ícono blanco y nombre para instalarla
+         como una app aparte. El servidor y el service worker la entregan en /encuestas. -->
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/survey-icon-192.png" />
+    <link rel="apple-touch-icon" href="/survey-apple-touch-icon.png" />
+    <link rel="manifest" href="/encuestas.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="SuperShop Survey" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="description" content="SuperShop Survey - Encuestas de satisfacción" />
+    <title>SuperShop Survey</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

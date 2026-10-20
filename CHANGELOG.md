@@ -18,11 +18,16 @@ Todas las versiones notables documentadas aquí. Formato basado en [Keep a Chang
   - **Historial:** los inicios de sesión exitosos y fallidos quedan en "Ver historial completo". Ya no se muestra el país.
 - **SuperShop Survey: tablets vinculadas por QR, sin usuario ni contraseña** (Ajustes → Vincular dispositivos).
   - **Vincular:** se elige la caja (la tienda se selecciona sola si solo hay una) y se genera un código QR. Al escanearlo, la tablet queda fija a esa caja y arranca directo en la encuesta.
+  - **Pantalla ajustada a tablets:** ocupa exactamente la pantalla, con "Siguiente" siempre visible. Las opciones crecen con el alto de la pantalla, siempre en al menos 2 columnas y centradas, sin el hueco vacío de antes.
   - **Sin cajero(a) por ahora:** la tablet no pide quién atiende y las encuestas se guardan solo con tienda y caja. El catálogo de cajeros(as) se conserva.
   - Estadísticas y Respuestas ya no tienen filtro de cajero(a); Rendimiento muestra solo Cajas (y Sucursales si hay varias). El aviso de calificaciones malas del día agrupa por caja.
   - **Seguridad:** el QR sirve una sola vez, vence en 5 minutos y se renueva solo mientras la pantalla está abierta. La tablet recibe un token propio que solo sirve para enviar encuestas; el servidor guarda la tienda y la caja de la tablet aunque el envío diga otra cosa.
   - **Sin salida:** la tablet no tiene botón "Salir" ni acceso al panel. Solo se cambia desvinculándola desde el panel.
   - **Se instala aparte** como "SuperShop Survey", a pantalla completa y con el logo blanco de SuperShop.
+- **Dos apps instalables (PWA) de verdad:**
+  - **Entradas:** `index.html` es **SuperShop** (logo azul) y `encuestas.html` es **SuperShop Survey** (logo blanco). Cada una tiene su manifiesto, ícono y nombre desde que carga, también sin conexión.
+  - **Instalación:** al vincular una tablet aparece el botón **Instalar SuperShop Survey**. La app instalada abre directo en las encuestas, a pantalla completa.
+  - **Corrección:** antes, el build agregaba el manifiesto azul también en las encuestas y el navegador podía instalar la app equivocada.
 - **Logo y nombre propios para las tablets:** **SuperShop** (logo de fondo azul) sigue igual para administrar y **SuperShop Survey** (logo blanco) para las tablets de encuestas. Cada QR de Vincular dispositivos lleva su logo al centro.
 - **Avisos de tablets** (notificaciones para quien tiene Vincular dispositivos):
   - Encuestas guardadas en una tablet que llevan más de 1 hora sin poder enviarse.
@@ -36,6 +41,7 @@ Todas las versiones notables documentadas aquí. Formato basado en [Keep a Chang
     - **Versión web:** los dos QR y el enlace privado usan el dominio fijo `https://app.supershop-mx.com`.
     - **App de escritorio:** usan la IP de la computadora en el wifi de la tienda, por http para que abran sin instalar certificados.
   - **SuperShop:** además tiene acceso privado o público.
+  - **Botón "Compartir"** (antes "Copiar"): abre el menú de compartir del equipo (WhatsApp, correo…); donde no existe, copia el enlace.
   - **Se quitaron** la configuración de dominio, la "Conexión temporal por internet" (ya no se inicia sola al arrancar) y los pasos largos de red local y certificado.
 - **Notificaciones rediseñadas**: se guardan en el servidor y cada usuario tiene su propio estado de leída o borrada.
   - **Acciones:** marcar como leída o no leída, "Marcar todas", borrar una o todas las leídas y filtrar "No leídas". Tocar una notificación abre la pantalla relacionada.

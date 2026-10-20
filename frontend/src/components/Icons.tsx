@@ -334,3 +334,12 @@ export const IconMonitor = (p: P) => (
     <path d="M8 21h8M12 17v4" />
   </svg>
 );
+
+export const IconShare = (p: P) => (
+  <svg {...base(p)}>
+    <circle cx="18" cy="5" r="3" />
+    <circle cx="6" cy="12" r="3" />
+    <circle cx="18" cy="19" r="3" />
+    <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+  </svg>
+);

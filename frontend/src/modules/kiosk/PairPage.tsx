@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import StoreLogo from '../../components/StoreLogo';
 import { Spinner } from '../../components/Modal';
@@ -8,6 +8,7 @@ import { pairDevice, useSurveyAppManifest } from '../../lib/device';
 import type { DeviceInfo } from '../../lib/device';
 import { useSettings } from '../../lib/settings';
 import { clearDraft, clearKioskState } from './kioskTypes';
+import { SurveyInstallStep } from './SurveyInstall';
 
 /** La app de escritorio es la computadora principal: no se convierte en tablet de encuestas. */
 const isDesktopApp = !!(window as Window & { electronAPI?: unknown }).electronAPI;
@@ -34,7 +35,6 @@ export default function PairPage() {
         clearKioskState();
         clearDraft();
         setDevice(d);
-        window.setTimeout(() => navigate('/encuestas', { replace: true }), 1500);
       })
       .catch((err) =>
         setError(
@@ -46,6 +46,8 @@ export default function PairPage() {
         )
       );
   }, [code, navigate]);
+
+  const openSurveys = useCallback(() => navigate('/encuestas', { replace: true }), [navigate]);
 
   if (!code) return <Navigate to="/encuestas" replace />;
 
@@ -69,10 +71,13 @@ export default function PairPage() {
             {error}
           </Message>
         ) : device ? (
-          <Message tone="ok" title="¡Tablet vinculada!">
-            {device.register?.name ?? device.name}
-            {device.branch ? ` · ${device.branch.name}` : ''}. Abriendo las encuestas…
-          </Message>
+          <>
+            <Message tone="ok" title="¡Tablet vinculada!">
+              {device.register?.name ?? device.name}
+              {device.branch ? ` · ${device.branch.name}` : ''}.
+            </Message>
+            <SurveyInstallStep onContinue={openSurveys} />
+          </>
         ) : (
           <div className="flex flex-col items-center gap-3 py-4">
             <Spinner className="h-8 w-8 text-brand-600" />

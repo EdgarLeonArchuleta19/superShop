@@ -71,7 +71,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    document.title = settings.store_name;
+    // Las tablets de encuestas son la app "SuperShop Survey" (encuestas.html).
+    document.title = window.location.pathname.startsWith('/encuestas') ? 'SuperShop Survey' : settings.store_name;
   }, [settings.store_name]);
 
   const save = useCallback(async (next: Partial<StoreSettings>) => {

@@ -12,32 +12,28 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
       includeAssets: ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png', 'survey-icon-192.png', 'survey-icon-512.png', 'survey-icon-maskable-512.png', 'survey-apple-touch-icon.png', 'superShop.jpg', 'supershop_fondo_azul.png'],
-      manifest: {
-        name: 'SuperShop',
-        short_name: 'SuperShop',
-        description: 'Sistema de administración de tiendas',
-        lang: 'es',
-        theme_color: '#2b46c4',
-        background_color: '#f5f5f7',
-        display: 'standalone',
-        id: '/',
-        start_url: '/',
-        scope: '/',
-        icons: [
-          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-          { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-        ],
-      },
+      // Dos apps instalables con su propio manifiesto (archivos en assets/):
+      // - manifest.webmanifest → SuperShop (logo azul), entrada index.html.
+      // - encuestas.webmanifest → SuperShop Survey (logo blanco), entrada encuestas.html.
+      // Con manifest: false el plugin no inyecta un tercer manifiesto en el HTML.
+      manifest: false,
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,jpg,ico,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,jpg,ico,woff2,webmanifest}'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//],
+        // /encuestas no usa index.html: tiene su propia entrada (ver runtimeCaching).
+        navigateFallbackDenylist: [/^\/api\//, /^\/encuestas(\/|$)/],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
         runtimeCaching: [
+          {
+            // SuperShop Survey: las pantallas de /encuestas se abren con encuestas.html (su
+            // manifiesto y su ícono), también sin conexión.
+            urlPattern: ({ request, url }) => request.mode === 'navigate' && /^\/encuestas(\/|$)/.test(url.pathname),
+            handler: async () =>
+              (await caches.match('/encuestas.html', { ignoreSearch: true })) || fetch('/encuestas.html'),
+          },
           {
             urlPattern: /\/api\/(catalog\/|settings(\?|$))/,
             handler: 'NetworkFirst',
@@ -65,5 +61,8 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 1600,
+    rollupOptions: {
+      input: { main: 'index.html', encuestas: 'encuestas.html' },
+    },
   },
 });

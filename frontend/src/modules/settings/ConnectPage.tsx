@@ -6,7 +6,7 @@ import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { ConfirmDialog, Spinner } from '../../components/Modal';
 import Switch from '../../components/Switch';
-import { IconAlert, IconCopy, IconExternalLink, IconLock, IconRefresh } from '../../components/Icons';
+import { IconAlert, IconExternalLink, IconLock, IconRefresh, IconShare } from '../../components/Icons';
 import { NoNetworkNotice, QrAddressPicker, SurveyPairingCard, useQrTarget } from './DevicesSection';
 import type { PairingAddress } from './DevicesSection';
 
@@ -90,7 +90,7 @@ function Row({ title, hint, children }: { title: React.ReactNode; hint?: React.R
 }
 
 /** QR de SuperShop: abre /instalar, que guía para agregar la app a la pantalla de inicio. */
-function AddressBox({ url, accessKey, onCopy }: { url: string; accessKey: string | null; onCopy: (link: string) => void }) {
+function AddressBox({ url, accessKey, onShare }: { url: string; accessKey: string | null; onShare: (link: string) => void }) {
   const qrValue = withAccess(url, '/instalar', accessKey);
   const link = withAccess(url, '/', accessKey);
   const qrSize = 176;
@@ -114,9 +114,9 @@ function AddressBox({ url, accessKey, onCopy }: { url: string; accessKey: string
         </ol>
         <p className="break-all rounded-xl bg-faint px-3 py-2 font-mono text-[13px] font-semibold text-ink">{link}</p>
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => onCopy(link)} className="btn-soft h-9 px-3.5 text-[13px]">
-            <IconCopy className="h-4 w-4" />
-            Copiar
+          <button onClick={() => onShare(link)} className="btn-primary h-9 px-4 text-[13px]">
+            <IconShare className="h-4 w-4" />
+            Compartir
           </button>
           <a href={link} target="_blank" rel="noopener noreferrer" className="btn-ghost h-9 px-3.5 text-[13px]">
             <IconExternalLink className="h-4 w-4" />
@@ -172,8 +172,20 @@ export default function ConnectPage() {
     }
   };
 
-  const copy = async (url: string) => {
-    if (await copyText(url)) toast.create('Enlace copiado', 'Pégalo en el navegador o envíalo por WhatsApp.');
+  /**
+   * Compartir: abre el menú de compartir del equipo (WhatsApp, correo…). Si el navegador no
+   * lo tiene (o la página es http, como en la red local), copia el enlace.
+   */
+  const share = async (url: string) => {
+    if (typeof navigator.share === 'function' && window.isSecureContext) {
+      try {
+        await navigator.share({ title: 'SuperShop', text: 'Entra a SuperShop con este enlace:', url });
+        return;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return; // la persona cerró el menú
+      }
+    }
+    if (await copyText(url)) toast.create('Enlace copiado', 'Pégalo en WhatsApp, un correo o donde quieras enviarlo.');
     else toast.error('No se pudo copiar', 'Selecciona el enlace y cópialo manualmente.');
   };
 
@@ -242,7 +254,7 @@ export default function ConnectPage() {
         </div>
 
         {adminTarget.url ? (
-          <AddressBox url={adminTarget.url} accessKey={info.access.key} onCopy={(link) => void copy(link)} />
+          <AddressBox url={adminTarget.url} accessKey={info.access.key} onShare={(link) => void share(link)} />
         ) : (
           <NoNetworkNotice />
         )}

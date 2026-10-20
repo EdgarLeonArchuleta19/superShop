@@ -44,47 +44,50 @@ export default function QuestionScreen({ question, selected, onToggle, onNext, o
         key={question.id}
         className="anim-slide-in flex flex-1 min-h-0 flex-col overflow-y-auto py-6"
       >
-        <h2 className="text-center text-[22px] font-semibold leading-snug tracking-tight sm:text-[26px]">
-          {question.title}
-        </h2>
-        <p className="mt-1.5 text-center text-[14px] text-muted sm:text-base">{question.help}</p>
+        {/* my-auto: centra pregunta y opciones si sobra alto; si no caben, se desplazan. */}
+        <div className="my-auto w-full">
+          <h2 className="text-center text-[22px] font-semibold leading-snug tracking-tight sm:text-[26px]">
+            {question.title}
+          </h2>
+          <p className="mt-1.5 text-center text-[14px] text-muted sm:text-base">{question.help}</p>
 
-        <div className="mt-6 grid flex-1 grid-cols-1 gap-3 content-start sm:grid-cols-2 lg:grid-cols-3">
-          {question.options.map((option, i) => {
-            const active = selected.includes(option);
-            const emoji = OPTION_EMOJI[question.id]?.[option];
-            return (
-              <button
-                key={option}
-                onClick={() => onToggle(option)}
-                style={{ animationDelay: `${i * 45}ms` }}
-                className={`anim-fade-up group relative flex min-h-[132px] flex-col items-center justify-center gap-2.5 rounded-3xl border-2 p-4 text-center transition-all duration-200 active:scale-[0.97] ${
-                  active
-                    ? 'border-brand-600 bg-brand-50 shadow-pop dark:bg-brand-500/15'
-                    : 'border-line bg-surface hover:border-brand-400 hover:shadow-card'
-                }`}
-              >
-                <span
-                  className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 transition ${
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
+            {question.options.map((option, i) => {
+              const active = selected.includes(option);
+              const emoji = OPTION_EMOJI[question.id]?.[option];
+              return (
+                <button
+                  key={option}
+                  onClick={() => onToggle(option)}
+                  style={{ animationDelay: `${i * 45}ms` }}
+                  className={`anim-fade-up group relative flex min-h-[clamp(112px,18dvh,220px)] flex-col items-center justify-center gap-2.5 rounded-3xl border-2 p-4 text-center transition-all duration-200 active:scale-[0.97] ${
                     active
-                      ? 'anim-pop border-brand-600 bg-brand-600 text-white'
-                      : 'border-line text-transparent'
-                  }`}
-                  style={{ position: 'absolute', top: '0.75rem', right: '0.75rem' }}
-                >
-                  <IconCheck className="h-3.5 w-3.5" />
-                </span>
-                {emoji && <span className="text-[40px] leading-none sm:text-[44px]">{emoji}</span>}
-                <span
-                  className={`text-[16px] font-semibold leading-snug sm:text-[17px] ${
-                    active ? 'text-brand-900 dark:text-brand-100' : 'text-ink/85'
+                      ? 'border-brand-600 bg-brand-50 shadow-pop dark:bg-brand-500/15'
+                      : 'border-line bg-surface hover:border-brand-400 hover:shadow-card'
                   }`}
                 >
-                  {option}
-                </span>
-              </button>
-            );
-          })}
+                  <span
+                    className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 transition ${
+                      active
+                        ? 'anim-pop border-brand-600 bg-brand-600 text-white'
+                        : 'border-line text-transparent'
+                    }`}
+                    style={{ position: 'absolute', top: '0.75rem', right: '0.75rem' }}
+                  >
+                    <IconCheck className="h-3.5 w-3.5" />
+                  </span>
+                  {emoji && <span className="text-[40px] leading-none sm:text-[44px]">{emoji}</span>}
+                  <span
+                    className={`text-[16px] font-semibold leading-snug sm:text-[17px] ${
+                      active ? 'text-brand-900 dark:text-brand-100' : 'text-ink/85'
+                    }`}
+                  >
+                    {option}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 

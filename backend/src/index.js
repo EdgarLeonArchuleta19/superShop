@@ -163,7 +163,7 @@ app.use('/api/admin', adminRoutes);
 
 const staticDir = process.env.FRONTEND_DIST || path.join(__dirname, '../../frontend/dist');
 if (fs.existsSync(staticDir)) {
-  const NO_CACHE = new Set(['index.html', 'sw.js', 'manifest.webmanifest', 'encuestas.webmanifest', 'registerSW.js']);
+  const NO_CACHE = new Set(['index.html', 'encuestas.html', 'sw.js', 'manifest.webmanifest', 'encuestas.webmanifest', 'registerSW.js']);
   app.use(
     express.static(staticDir, {
       setHeaders(res, filePath) {
@@ -180,7 +180,9 @@ if (fs.existsSync(staticDir)) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     if (req.path.startsWith('/api/')) return next();
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.sendFile(path.join(staticDir, 'index.html'));
+    // SuperShop Survey (tablets) tiene su propia entrada: otro manifiesto, ícono y nombre.
+    const survey = /^\/encuestas(\/|$)/.test(req.path) && fs.existsSync(path.join(staticDir, 'encuestas.html'));
+    res.sendFile(path.join(staticDir, survey ? 'encuestas.html' : 'index.html'));
   });
 }
 

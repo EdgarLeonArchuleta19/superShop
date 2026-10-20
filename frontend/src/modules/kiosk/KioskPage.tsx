@@ -219,7 +219,8 @@ export default function KioskPage() {
   if (!branch || !register) return <DeviceNotice status="no-place" pending={pending} />;
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    // Alto exacto de la pantalla: "Siguiente" siempre a la vista; solo se desplazan las opciones.
+    <div className="flex h-dvh flex-col overflow-hidden">
       <header className="z-20 flex h-16 items-center justify-between gap-3 border-b border-line bg-surface/80 px-4 text-ink backdrop-blur sm:px-6">
         <div className="flex items-center gap-2.5">
           <StoreLogo

@@ -104,7 +104,12 @@ No hay suite de tests automatizados. Para validar un cambio: `npm run typecheck`
 - **Frontend:**
   - **Rutas:** `/encuestas` (`KioskPage`) y `/encuestas/vincular?codigo=` (`PairPage`); el estado vive en `lib/device.ts`.
   - **Panel:** `modules/settings/DevicesSection.tsx` tiene el QR (`SurveyPairingCard`, en Vincular dispositivos) y el modal `EditKioskModal`. La lista de tablets está en la tabla de dispositivos de `AccessLogPage.tsx` (`/api/admin/access-log/online`).
-  - **Manifiesto:** las pantallas de encuestas cambian el manifiesto a `encuestas.webmanifest`.
+  - **PWA:** dos entradas de Vite.
+    - `index.html` → `manifest.webmanifest`: SuperShop, logo azul.
+    - `encuestas.html` → `encuestas.webmanifest`: SuperShop Survey, logo blanco.
+    - Los manifiestos son archivos en `frontend/assets/` (`manifest: false` en `vite.config.ts`).
+    - El servidor (`index.js`) y el service worker (`runtimeCaching`) entregan `encuestas.html` en `/encuestas*`.
+    - Instalar requiere https.
 - `accessGate` deja pasar a una tablet con token válido y le renueva la cookie `ss_acceso`.
 - `checkDevices()` (cada 10 min, `startDeviceWatch()` en `index.js`) avisa con `notify()` de encuestas atoradas (`pending_since` > 1 h) y de tablets sin latido por 24 h. La desconexión se cuenta desde que arrancó el servidor.
 - **Marca:** "SuperShop" usa los `icon-*.png` (fondo azul) y "SuperShop Survey" los `survey-*.png` (logo blanco). En las pantallas de la tablet usa `<StoreLogo app="survey">`.
