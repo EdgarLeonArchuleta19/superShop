@@ -26,7 +26,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     label: 'Encuestas',
     items: [
       { key: 'surveys.stats', label: 'Estadísticas', description: 'Gráficas y resultados de satisfacción.', path: '/app/encuestas/estadisticas' },
-      { key: 'surveys.kiosk', label: 'Mi encuesta', description: 'Modo kiosko para que los clientes respondan.', path: '/mi-encuesta' },
       { key: 'surveys.responses', label: 'Respuestas', description: 'Ver cada encuesta recibida.', path: '/app/encuestas/respuestas' },
       { key: 'surveys.export', label: 'Exportar resultados', description: 'Descargar estadísticas en Excel y PDF.' },
     ],
@@ -43,9 +42,9 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     label: 'Ajustes',
     items: [
       { key: 'settings.users', label: 'Usuarios', description: 'Crear cuentas y asignarles un rol (excepto Administrador).', path: '/app/ajustes/usuarios' },
+      { key: 'settings.connect', label: 'Vincular dispositivos', description: 'Vincular tablets de encuestas, códigos QR y conexión de otros dispositivos.', path: '/app/ajustes/conectar' },
       { key: 'settings.backups', label: 'Respaldos e Importaciones', description: 'Respaldos locales, Google Drive e importación.', path: '/app/ajustes/respaldos' },
       { key: 'settings.info', label: 'Información', description: 'Nombre y logo de la tienda.', path: '/app/ajustes/informacion' },
-      { key: 'settings.connect', label: 'Vincular dispositivos', description: 'Túnel y código QR para otros dispositivos.', path: '/app/ajustes/conectar' },
     ],
   },
 ];
@@ -71,6 +70,5 @@ export function homePath(user: AuthUser | null): string {
       if (p.path && p.path.startsWith('/app') && can(user, p.key)) return p.path;
     }
   }
-  if (can(user, 'surveys.kiosk')) return '/mi-encuesta';
   return '/app/ajustes/perfil';
 }

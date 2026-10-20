@@ -1,6 +1,8 @@
 export type TokenRole = 'admin' | 'kiosk';
 
 const TOKEN_KEY = 'nallely.token';
+/** Token de la tablet de "SuperShop Survey" (ver lib/device.ts). */
+const DEVICE_TOKEN_KEY = 'supershop.device.token';
 
 export class ApiError extends Error {
   status: number;
@@ -44,6 +46,30 @@ export function clearToken(_role?: TokenRole): void {
   }
 }
 
+export function getDeviceToken(): string | null {
+  try {
+    return localStorage.getItem(DEVICE_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setDeviceToken(token: string): void {
+  try {
+    localStorage.setItem(DEVICE_TOKEN_KEY, token);
+  } catch {
+    /* ignorar */
+  }
+}
+
+export function clearDeviceToken(): void {
+  try {
+    localStorage.removeItem(DEVICE_TOKEN_KEY);
+  } catch {
+    /* ignorar */
+  }
+}
+
 export async function api<T>(
   path: string,
   opts: { method?: string; body?: unknown; role?: TokenRole; /** Corta la petición (NetError) si tarda más. */ timeoutMs?: number } = {}
@@ -51,6 +77,8 @@ export async function api<T>(
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
+  const deviceToken = getDeviceToken();
+  if (deviceToken) headers['X-Device-Token'] = deviceToken;
 
   const controller = opts.timeoutMs ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), opts.timeoutMs) : null;

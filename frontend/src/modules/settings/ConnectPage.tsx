@@ -16,6 +16,8 @@ import {
   IconRefresh,
   IconRegister,
 } from '../../components/Icons';
+import { SurveyPairingCard } from './DevicesSection';
+import type { PairingAddress } from './DevicesSection';
 
 interface TunnelStatus {
   mode: 'fixed' | 'quick' | null;
@@ -185,6 +187,10 @@ function Collapsible({
   );
 }
 
+/** Logo de SuperShop (fondo azul). */
+const ADMIN_ICON = '/icon-192.png';
+const adminLogo = <img src={ADMIN_ICON} alt="" className="h-10 w-10 rounded-2xl" />;
+
 /** El QR abre /instalar: ahí se guía a la persona para agregar la app a su pantalla de inicio. */
 function AddressBox({ url, onCopy, qrSize = 148 }: { url: string; onCopy: (link: string) => void; qrSize?: number }) {
   const accessKey = useContext(AccessKeyContext);
@@ -208,7 +214,15 @@ function AddressBox({ url, onCopy, qrSize = 148 }: { url: string; onCopy: (link:
       </div>
       <div className="flex flex-col items-center gap-1.5 self-center">
         <div className="rounded-2xl bg-white p-2 ring-1 ring-line">
-          <QRCodeSVG value={qrValue} size={qrSize} level="M" marginSize={1} bgColor="#ffffff" fgColor="#0f172a" />
+          <QRCodeSVG
+            value={qrValue}
+            size={qrSize}
+            level="Q"
+            marginSize={1}
+            bgColor="#ffffff"
+            fgColor="#0f172a"
+            imageSettings={{ src: ADMIN_ICON, height: Math.round(qrSize * 0.2), width: Math.round(qrSize * 0.2), excavate: true }}
+          />
         </div>
         <p className="max-w-[170px] text-center text-[11px] text-muted">
           Escanéalo con la cámara del celular para instalar la app
@@ -537,7 +551,7 @@ function LanSection({ info, copy }: { info: ConnectInfo; copy: (url: string) => 
               Abre <strong>Chrome</strong> o <strong>Edge</strong> y escribe la dirección de arriba (en una tablet o
               celular puedes escanear el código).
             </>,
-            'Inicia sesión con el usuario de esa persona o de esa caja.',
+            'Inicia sesión con el usuario de esa persona.',
             <>
               Para tenerlo como programa: en Chrome abre el menú <strong>⋮ → Transmitir, guardar y compartir → Crear
               acceso directo</strong> y marca <strong>Abrir como ventana</strong>.
@@ -657,6 +671,15 @@ export default function ConnectPage() {
   const publicOrigin = !fixed.configured && isPublicHost(hostname) ? window.location.origin : null;
   const fixedUrl = fixed.hostname ? `https://${fixed.hostname}` : null;
 
+  // Direcciones para el QR de las tablets de encuestas, de la más estable a la menos.
+  const pairingAddresses: PairingAddress[] = [];
+  if (fixed.configured && fixedUrl) pairingAddresses.push({ label: 'Dirección fija', url: fixedUrl });
+  if (publicOrigin) pairingAddresses.push({ label: 'Internet', url: publicOrigin });
+  if (quickTunnel?.running && quickTunnel.ready && quickTunnel.url) {
+    pairingAddresses.push({ label: 'Conexión temporal', url: quickTunnel.url });
+  }
+  for (const a of info.lan) pairingAddresses.push({ label: `Red local ${a.address}`, url: a.httpsUrl ?? a.url });
+
   const weakPasswords = info.weakPasswordUsers.length > 0 && (
     <div className="flex items-start gap-2.5 rounded-2xl border border-red-600/20 bg-red-50 px-4 py-3.5 text-[13px] text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
       <IconAlert className="mt-0.5 h-4 w-4 shrink-0" />
@@ -712,20 +735,22 @@ export default function ConnectPage() {
       <div>
         <h1 className="text-[20px] font-semibold tracking-tight sm:text-[22px]">Vincular dispositivos</h1>
         <p className="mt-0.5 text-[13px] text-muted">
-          Conecta celulares, tablets y otras computadoras a esta computadora principal.
+          Vincula tablets de encuestas y conecta celulares, tablets y computadoras de administración.
         </p>
       </div>
 
       {weakPasswords}
 
+      <SurveyPairingCard addresses={pairingAddresses} accessKey={info.access.key} />
+
       {publicOrigin ? (
         <Card
-          icon={<IconCloudCheck className="h-5 w-5" />}
-          title="Tu SuperShop ya está en internet"
+          icon={adminLogo}
+          title="SuperShop"
           subtitle={
             privateOn
-              ? 'Solo entra quien tenga este enlace privado.'
-              : 'Cualquier dispositivo con internet puede entrar con esta dirección.'
+              ? 'Para el personal que administra, con su usuario y contraseña. Solo entra quien tenga este enlace privado.'
+              : 'Para el personal que administra, con su usuario y contraseña, desde cualquier lugar con internet.'
           }
         >
           <div className="space-y-5">
@@ -743,9 +768,9 @@ export default function ConnectPage() {
         <>
           {/* Dirección fija: un solo QR para todos */}
           <Card
-            icon={<IconCloudCheck className="h-5 w-5" />}
-            title="Tu app SuperShop"
-            subtitle="Una sola dirección para todos: en la tienda, en casa o con datos del celular."
+            icon={adminLogo}
+            title="SuperShop"
+            subtitle="Para el personal que administra, con su usuario y contraseña: en la tienda, en casa o con datos del celular."
             badge={<FixedBadge tunnel={info.tunnel} />}
           >
             <div className="space-y-5">
@@ -809,9 +834,9 @@ export default function ConnectPage() {
           {!editingFixed && (
             <>
               <Card
-                icon={<IconRegister className="h-5 w-5" />}
-                title="Computadoras y tablets de la tienda"
-                subtitle="Por la red de la tienda (mismo módem o wifi). No necesita internet."
+                icon={adminLogo}
+                title="SuperShop"
+                subtitle="Para el personal que administra, con su usuario y contraseña, por la red de la tienda (mismo módem o wifi). No necesita internet."
               >
                 {privateAccess && <div className="mb-5">{privateAccess}</div>}
                 <LanSection info={info} copy={(u) => void copy(u)} />

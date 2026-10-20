@@ -6,7 +6,6 @@
 export const PERMISSIONS = [
   'panel',
   'surveys.stats',
-  'surveys.kiosk',
   'surveys.responses',
   'surveys.export',
   'catalog.branches',
@@ -18,7 +17,8 @@ export const PERMISSIONS = [
   'settings.connect',
 ];
 
-export const DEFAULT_CASHIER_PERMISSIONS = ['panel', 'surveys.stats', 'surveys.kiosk'];
+// Las encuestas ya no usan un permiso: las responden las tablets vinculadas (devices.js).
+export const DEFAULT_CASHIER_PERMISSIONS = ['panel', 'surveys.stats'];
 
 export function cleanPermissions(value) {
   if (!Array.isArray(value)) return [];

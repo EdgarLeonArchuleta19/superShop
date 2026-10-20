@@ -1,8 +1,11 @@
 import { db, now, sessionExpiresAt, SESSION_TTL_HOURS } from './db.js';
 import { PERMISSIONS, parsePermissions } from './permissions.js';
+import { clientIp } from './security.js';
 
 const TTL_MS = SESSION_TTL_HOURS * 60 * 60 * 1000;
 const RENEW_EVERY_MS = Math.min(24 * 60 * 60 * 1000, TTL_MS / 2);
+/** Cada cuánto se guarda la última actividad de una sesión (Conectados ahora, en Registro de accesos). */
+const SEEN_EVERY_MS = 5 * 60 * 1000;
 
 export function mapSession(session) {
   if (!session) return null;
@@ -48,9 +51,23 @@ export function requireAuth(...roles) {
     if (roles.length && !roles.includes(session.role)) {
       return res.status(403).json({ error: 'Permisos insuficientes' });
     }
+    touchActivity(session, req);
     req.session = session;
     next();
   };
+}
+
+/** Última actividad, IP y navegador de la sesión; se escribe como máximo cada 5 minutos. */
+function touchActivity(session, req) {
+  const last = session.last_seen_at ? new Date(session.last_seen_at).getTime() : 0;
+  if (Date.now() - last < SEEN_EVERY_MS) return;
+  const userAgent = String(req.headers['user-agent'] || '').slice(0, 300) || null;
+  db.prepare('UPDATE sessions SET last_seen_at = ?, ip = ?, user_agent = ? WHERE id = ?').run(
+    now(),
+    clientIp(req) || null,
+    userAgent,
+    session.id
+  );
 }
 
 // Rol y permisos actuales del usuario, leídos de la BD en cada petición para que

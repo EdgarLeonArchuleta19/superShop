@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { CLOUD, db } from './db.js';
+import { isActiveDeviceToken, readDeviceToken } from './devices.js';
 
 /*
  * Acceso solo con enlace privado.
@@ -13,7 +14,9 @@ import { CLOUD, db } from './db.js';
  * máximo que permiten los navegadores).
  *
  * Siempre pasan /api/health (Render y UptimeRobot) y la ventana de la app de escritorio
- * (conexión directa desde esta computadora, sin pasar por el túnel).
+ * (conexión directa desde esta computadora, sin pasar por el túnel). También las tablets de
+ * encuestas vinculadas (encabezado X-Device-Token): reciben la cookie al día, así que no
+ * se quedan fuera si se genera un enlace nuevo.
  * Emergencia: ACCESS_GATE_DISABLED=true apaga la protección sin entrar a la app.
  */
 
@@ -107,8 +110,23 @@ self.addEventListener('activate', (event) => {
 });
 `;
 
-/** Imágenes que la página pública necesita aunque no se tenga el enlace. */
-const PUBLIC_FILES = new Set(['/supershop_fondo_azul.png', '/icon-192.png']);
+/**
+ * Archivos que se entregan aunque no se tenga el enlace: las imágenes de la página pública y
+ * los manifiestos de instalación con sus íconos (el navegador los pide sin la cookie).
+ */
+const PUBLIC_FILES = new Set([
+  '/supershop_fondo_azul.png',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-maskable-512.png',
+  '/apple-touch-icon.png',
+  '/survey-icon-192.png',
+  '/survey-icon-512.png',
+  '/survey-icon-maskable-512.png',
+  '/survey-apple-touch-icon.png',
+  '/manifest.webmanifest',
+  '/encuestas.webmanifest',
+]);
 
 /** Página pública fija: la misma presentación que el panel azul del inicio de sesión. */
 function landingPage() {
@@ -163,6 +181,11 @@ export function accessGate(req, res, next) {
     url.searchParams.delete(ACCESS_PARAM);
     res.setHeader('Cache-Control', 'no-store');
     return res.redirect(302, url.pathname + url.search);
+  }
+  const deviceToken = readDeviceToken(req);
+  if (deviceToken && isActiveDeviceToken(deviceToken)) {
+    if (!same(readCookie(req), c.key)) grantAccess(req, res, c.key);
+    return next();
   }
   if (same(readCookie(req), c.key)) {
     // Renovar al abrir la app: una página, o /api/settings (la app instalada se abre desde

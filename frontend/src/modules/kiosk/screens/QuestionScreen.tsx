@@ -33,7 +33,8 @@ interface Props {
   selected: string[];
   onToggle: (option: string) => void;
   onNext: () => void;
-  onBack: () => void;
+  /** Sin `onBack` no se muestra el botón Atrás. */
+  onBack?: () => void;
 }
 
 export default function QuestionScreen({ question, selected, onToggle, onNext, onBack }: Props) {
@@ -89,10 +90,12 @@ export default function QuestionScreen({ question, selected, onToggle, onNext, o
 
       <div className="shrink-0 border-t border-line py-4">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4">
-          <button onClick={onBack} className="btn-ghost h-16 flex-1 px-5 text-base sm:text-lg">
-            <IconChevronLeft className="h-6 w-6" />
-            Atrás
-          </button>
+          {onBack && (
+            <button onClick={onBack} className="btn-ghost h-16 flex-1 px-5 text-base sm:text-lg">
+              <IconChevronLeft className="h-6 w-6" />
+              Atrás
+            </button>
+          )}
           <button
             onClick={onNext}
             disabled={selected.length === 0}

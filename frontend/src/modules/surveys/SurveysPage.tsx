@@ -3,7 +3,7 @@ import { api } from '../../lib/api';
 import { fmtDateTime } from '../../lib/format';
 import { exportExcel, exportPdf } from '../../lib/export';
 import { useSettings } from '../../lib/settings';
-import type { Branch, Cashier, Filters, Register, Survey } from '../../lib/types';
+import type { Branch, Filters, Register, Survey } from '../../lib/types';
 import FilterBar, { defaultFilters, filtersQuery } from './components/FilterBar';
 import Pagination from '../../components/Pagination';
 import { Spinner } from '../../components/Modal';
@@ -18,7 +18,6 @@ export default function SurveysPage() {
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [registers, setRegisters] = useState<Register[]>([]);
-  const [cashiers, setCashiers] = useState<Cashier[]>([]);
   const [rows, setRows] = useState<Survey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -29,12 +28,10 @@ export default function SurveysPage() {
     Promise.all([
       api<{ items: Branch[] }>('/api/admin/branches', { role: 'admin' }),
       api<{ items: Register[] }>('/api/admin/registers', { role: 'admin' }),
-      api<{ items: Cashier[] }>('/api/admin/cashiers', { role: 'admin' }),
     ])
-      .then(([b, r, c]) => {
+      .then(([b, r]) => {
         setBranches(b.items);
         setRegisters(r.items);
-        setCashiers(c.items);
       })
       .catch(() => undefined);
   }, []);
@@ -74,10 +71,8 @@ export default function SurveysPage() {
     const parts: string[] = [];
     const branch = branches.find((b) => String(b.id) === filters.branch_id);
     const reg = registers.find((r) => String(r.id) === filters.register_id);
-    const cash = cashiers.find((c) => String(c.id) === filters.cashier_id);
     if (branch) parts.push(`Sucursal: ${branch.name}`);
     if (reg) parts.push(`Caja: ${reg.name}`);
-    if (cash) parts.push(`Cajero(a): ${cash.name}`);
     if (filters.from || filters.to) parts.push(`Del ${filters.from || '…'} al ${filters.to || 'hoy'}`);
     return parts.join(' | ') || 'Sin filtros (todo)';
   };
@@ -133,7 +128,6 @@ export default function SurveysPage() {
         onChange={setFilters}
         branches={branches}
         registers={registers}
-        cashiers={cashiers}
       >
         <button
           onClick={() => load()}

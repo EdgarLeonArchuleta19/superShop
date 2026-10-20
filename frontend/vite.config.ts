@@ -11,7 +11,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png', 'superShop.jpg', 'supershop_fondo_azul.png'],
+      includeAssets: ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png', 'survey-icon-192.png', 'survey-icon-512.png', 'survey-icon-maskable-512.png', 'survey-apple-touch-icon.png', 'superShop.jpg', 'supershop_fondo_azul.png'],
       manifest: {
         name: 'SuperShop',
         short_name: 'SuperShop',

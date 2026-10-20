@@ -6,7 +6,7 @@ import {
   browserNotificationsSupported,
   setBrowserNotifications,
 } from '../lib/notifications';
-import { IconAlert, IconBell, IconCheck, IconEye, IconInfo, IconLock, IconStar, IconX } from '../components/Icons';
+import { IconAlert, IconBell, IconCheck, IconEye, IconInfo, IconLock, IconStar, IconTablet, IconX } from '../components/Icons';
 
 type IconType = (p: { className?: string }) => React.ReactElement;
 
@@ -14,6 +14,7 @@ const KIND_ICON: Record<string, IconType> = {
   security: IconLock,
   surveys: IconStar,
   backup: IconAlert,
+  devices: IconTablet,
 };
 
 const TONE: Record<NotificationTone, string> = {

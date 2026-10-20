@@ -65,16 +65,20 @@
 2. Pulsa **Iniciar túnel**.
 3. Espera ~4 segundos: aparecerá la **URL** (`https://xxxx.trycloudflare.com`) y un **código QR grande**.
 
-### 4.2 En cada dispositivo hija
-- **Opción A (QR)**: Abre la cámara o app de QR → escanea → abre en navegador.
-- **Opción B (Enlace)**: Copia la URL y envíala por WhatsApp/Email/Teams.
-- El navegador carga la PWA → ofrece **"Instalar SuperShop"** (Chrome/Edge: menú ⋮ → Instalar).
-- Inicia sesión con tu usuario (ej. `cajero` / `cajero123`).
-- Pulsa **Mi encuesta** → ya puedes atender clientes.
+### 4.2 Tablets de encuestas
+- En **Vincular dispositivos → SuperShop Survey** elige la tienda y la caja y pulsa **Generar código QR**.
+- Escanea el código con la cámara de la tablet y toca el enlace: se vincula sola, sin usuario ni contraseña.
+- El código sirve una sola vez y se renueva cada 5 minutos mientras la pantalla está abierta.
+- Para pantalla completa, agrega la página a la pantalla de inicio ("SuperShop Survey").
+- La tablet no tiene botón para salir: se retira o se cambia de caja en **Ajustes → Registro de accesos** (Editar o Desvincular en la fila de la tablet).
+
+### 4.3 Equipos de administración
+- Escanea el QR de **SuperShop** (o abre la dirección) e inicia sesión con el usuario de esa persona.
+- El navegador ofrece **"Instalar SuperShop"** (Chrome/Edge: menú ⋮ → Instalar).
 
 > **Importante**: La URL del túnel **cambia cada vez que reinicias la app en la PC madre**. Vuelve a mostrar el QR nuevo cada mañana.
 
-### 4.3 Funcionamiento offline
+### 4.4 Funcionamiento offline
 - Si la tablet pierde conexión, las respuestas se guardan localmente (IndexedDB).
 - Al recuperar internet, se sincronizan automáticamente (batch de 200).
 - El kiosko **nunca cierra sesión solo** (persistente en localStorage).

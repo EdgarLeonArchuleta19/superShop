@@ -42,21 +42,21 @@
 
 1. Abre SuperShop (acceso directo en Escritorio / Menú Inicio).
 2. Si el túnel no está activo: **Ajustes → Vincular dispositivos → Iniciar túnel**.
-3. Muestra el QR a los dispositivos "hijas" (tablets en cajas, móviles de supervisores).
-4. Las hijas abren la URL, inician sesión y usan **Mi encuesta** (kiosko).
+3. Tablets de encuestas: en **Vincular dispositivos → SuperShop Survey** elige tienda y caja, genera el QR y escanéalo con la tablet. Queda lista, sin usuario ni contraseña.
+4. Equipos de administración (supervisores): escanean el QR de **SuperShop** e inician sesión.
 5. Revisa respuestas en **Encuestas → Respuestas** y gráficas en **Estadísticas**.
 6. Gestiona catálogos en **Catálogos** (solo admin).
 7. Configura backups en **Ajustes → Administrador → Respaldo automático**.
 
 ---
 
-## Uso en dispositivos "hijas"
+## Uso en tablets de encuestas
 
-1. Escanea el QR con la cámara o abre el enlace `https://xxxx.trycloudflare.com`.
-2. La PWA se instala automáticamente (Chrome/Edge: "Instalar SuperShop").
-3. Inicia sesión con tu usuario (ej. `cajero` / `cajero123`).
-3. Pulsa **Mi encuesta** → atiende clientes → envía valoración.
+1. Escanea el QR de **SuperShop Survey** con la cámara de la tablet (vence en 5 minutos y sirve una sola vez).
+2. La tablet se vincula sola y abre las encuestas de su caja. Para tenerla a pantalla completa, agrégala a la pantalla de inicio ("SuperShop Survey").
+3. La tablet arranca directo en la encuesta de su caja (no se elige cajero(a)).
 4. Funciona offline: si hay cortes de red, las respuestas se guardan y sincronizan al volver.
+5. Para retirarla o cambiarla de caja: **Ajustes → Registro de accesos** (Editar o Desvincular en la fila de la tablet).
 
 ---
 

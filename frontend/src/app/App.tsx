@@ -7,11 +7,13 @@ import { ToastProvider } from '../lib/toast';
 import { SettingsProvider, useSettings } from '../lib/settings';
 import { flushOutbox, getPendingCount } from '../lib/offline';
 import { homePath } from '../lib/permissions';
+import { isPairedDevice } from '../lib/device';
 import Splash from '../components/Splash';
 import { Spinner } from '../components/Modal';
 import LoginPage from '../modules/auth/LoginPage';
 
 const KioskPage = lazy(() => import('../modules/kiosk/KioskPage'));
+const PairPage = lazy(() => import('../modules/kiosk/PairPage'));
 const AdminLayout = lazy(() => import('./AdminLayout'));
 const PanelPage = lazy(() => import('../modules/panel/PanelPage'));
 const DashboardPage = lazy(() => import('../modules/surveys/DashboardPage'));
@@ -54,6 +56,8 @@ function OutboxFlusher() {
 
 function HomeRedirect() {
   const { ready, user } = useAuth();
+  // Tablet de encuestas: siempre abre en las encuestas (también la app instalada).
+  if (isPairedDevice()) return <Navigate to="/encuestas" replace />;
   if (!ready) return <Splash />;
   return <Navigate to={user ? '/app' : '/login'} replace />;
 }
@@ -88,16 +92,10 @@ function AnimatedRoutes() {
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/instalar" element={<InstallPage />} />
-      <Route
-        path="/mi-encuesta"
-        element={
-          <RequireAuth>
-            <PermGate perm="surveys.kiosk">
-              <KioskPage />
-            </PermGate>
-          </RequireAuth>
-        }
-      />
+      {/* SuperShop Survey: tablets vinculadas por QR, sin inicio de sesión. */}
+      <Route path="/encuestas" element={<KioskPage />} />
+      <Route path="/encuestas/vincular" element={<PairPage />} />
+      <Route path="/mi-encuesta" element={<Navigate to="/encuestas" replace />} />
       <Route
         path="/app"
         element={

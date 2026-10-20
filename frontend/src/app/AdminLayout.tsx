@@ -39,7 +39,6 @@ interface Leaf {
   label: string;
   icon: IconType;
   perm?: string;
-  external?: boolean;
   /** Solo existe en la app de escritorio (se oculta en la versión web). */
   desktopOnly?: boolean;
 }
@@ -63,7 +62,6 @@ const MENU: MenuEntry[] = [
     icon: IconClipboard,
     children: [
       { to: '/app/encuestas/estadisticas', label: 'Estadísticas', icon: IconBarChart2, perm: 'surveys.stats' },
-      { to: '/mi-encuesta', label: 'Mi encuesta', icon: IconUser, perm: 'surveys.kiosk', external: true },
       { to: '/app/encuestas/respuestas', label: 'Respuestas', icon: IconFileArchive, perm: 'surveys.responses' },
     ],
   },
@@ -87,10 +85,10 @@ const MENU: MenuEntry[] = [
       { to: '/app/ajustes/perfil', label: 'Perfil', icon: IconUser },
       { to: '/app/ajustes/usuarios', label: 'Usuarios', icon: IconUsers, perm: 'settings.users' },
       { to: '/app/ajustes/roles', label: 'Roles y permisos', icon: IconShield, perm: 'admin' },
+      { to: '/app/ajustes/conectar', label: 'Vincular dispositivos', icon: IconCloudCheck, perm: 'settings.connect' },
       { to: '/app/ajustes/accesos', label: 'Registro de accesos', icon: IconLock, perm: 'admin' },
       { to: '/app/ajustes/respaldos', label: 'Respaldos e Importaciones', icon: IconFileArchive, perm: 'settings.backups', desktopOnly: true },
       { to: '/app/ajustes/informacion', label: 'Información', icon: IconInfo, perm: 'settings.info' },
-      { to: '/app/ajustes/conectar', label: 'Vincular dispositivos', icon: IconCloudCheck, perm: 'settings.connect' },
     ],
   },
 ];

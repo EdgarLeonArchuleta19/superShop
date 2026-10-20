@@ -93,6 +93,23 @@ No hay suite de tests automatizados. Para validar un cambio: `npm run typecheck`
 - El backend relee los permisos del usuario en cada petición, así que los cambios a un rol aplican sin volver a iniciar sesión. El frontend los refresca con `/api/auth/me` al navegar.
 - La gestión de roles (`/api/admin/roles`) es exclusiva del Administrador. Quien tenga `settings.users` puede asignar roles, pero no el de Administrador.
 
+## Tablets de encuestas (SuperShop Survey)
+
+- Las encuestas se responden en tablets vinculadas por QR, sin usuario. No hay permiso de kiosko ni "Mi encuesta" en el menú.
+- **Backend:** `backend/src/devices.js` (tokens y middlewares) y `routes/devices.js`.
+  - **Tablas:** `devices` guarda solo el hash del token; `device_pairings` guarda los códigos del QR (un solo uso, 5 minutos).
+  - **Token:** la tablet lo manda en `X-Device-Token`. Solo sirve para `/api/surveys/batch` y `/api/device/heartbeat`.
+  - **Tienda y caja:** en `saveBatch` se toman de la tablet, no del envío.
+  - **Envío de encuestas:** `requireSurveySender` acepta una tablet o cualquier sesión de usuario (para vaciar outbox viejos).
+- **Frontend:**
+  - **Rutas:** `/encuestas` (`KioskPage`) y `/encuestas/vincular?codigo=` (`PairPage`); el estado vive en `lib/device.ts`.
+  - **Panel:** `modules/settings/DevicesSection.tsx` tiene el QR (`SurveyPairingCard`, en Vincular dispositivos) y el modal `EditKioskModal`. La lista de tablets está en la tabla de dispositivos de `AccessLogPage.tsx` (`/api/admin/access-log/online`).
+  - **Manifiesto:** las pantallas de encuestas cambian el manifiesto a `encuestas.webmanifest`.
+- `accessGate` deja pasar a una tablet con token válido y le renueva la cookie `ss_acceso`.
+- `checkDevices()` (cada 10 min, `startDeviceWatch()` en `index.js`) avisa con `notify()` de encuestas atoradas (`pending_since` > 1 h) y de tablets sin latido por 24 h. La desconexión se cuenta desde que arrancó el servidor.
+- **Marca:** "SuperShop" usa los `icon-*.png` (fondo azul) y "SuperShop Survey" los `survey-*.png` (logo blanco). En las pantallas de la tablet usa `<StoreLogo app="survey">`.
+- Las sesiones guardan `ip`, `user_agent` y `last_seen_at` (se escribe como máximo cada 5 minutos) para "Conectados ahora" en Registro de accesos (`/api/admin/access-log/online`).
+
 ## Red local y HTTPS
 
 - El servidor escucha en `PORT` (http, 3001) y en `HTTPS_PORT` (https, 3443). Para desactivar HTTPS se usa `LOCAL_HTTPS=false`.
@@ -115,7 +132,7 @@ No hay suite de tests automatizados. Para validar un cambio: `npm run typecheck`
 ## Protección del inicio de sesión y del acceso web
 
 - `backend/src/security.js` concentra estas reglas:
-  - **Inicio de sesión:** los intentos fallidos van a `login_failures` (por cuenta e IP, con bloqueo creciente) y cada intento queda en `login_log`. La pantalla es `/app/ajustes/accesos`, solo para el Administrador.
+  - **Inicio de sesión:** los intentos fallidos van a `login_failures` (por cuenta e IP, con bloqueo creciente) y cada intento queda en `login_log`. La pantalla es `/app/ajustes/accesos`, solo para el Administrador: muestra los dispositivos (sesiones activas y tablets) y el historial en "Ver historial completo".
   - **Acceso web:** `originGuard` rechaza lo que no traiga `CF_ORIGIN_SECRET` y aplica `ALLOWED_COUNTRIES`. Sin esas variables no hace nada, así que el escritorio y la red local no se ven afectados.
 - `backend/src/accessGate.js` maneja el acceso solo con enlace privado:
   - **Configuración:** se activa en `settings.access_gate` y la clave vive en `settings.access_key`; se maneja desde Vincular dispositivos, solo el Administrador.

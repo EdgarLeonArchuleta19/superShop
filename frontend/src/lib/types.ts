@@ -24,7 +24,8 @@ export interface Cashier {
 export interface KioskSessionInfo {
   branch: { id: number; name: string };
   register: { id: number; name: string };
-  cashier: { id: number; name: string };
+  /** Por ahora las tablets no eligen cajero(a): null. */
+  cashier: { id: number; name: string } | null;
 }
 
 export type UserRole = 'admin' | 'cashier';
@@ -181,7 +182,6 @@ export interface AccessLogEntry {
   /** 'ok' | 'contraseña' | 'usuario' | 'bloqueado' */
   reason: string;
   ip: string | null;
-  country: string | null;
   user_agent: string | null;
 }
 
@@ -197,13 +197,47 @@ export interface AccessLogResponse {
   items: AccessLogEntry[];
   locks: LoginLock[];
   last24h: { ok: number; fail: number; failedIps: number };
-  behindCloudflare: boolean;
+}
+
+/** Registro de accesos → Conectados ahora. */
+export interface OnlineSession {
+  id: number;
+  user_name: string;
+  username: string | null;
+  role_name: string | null;
+  created_at: string;
+  last_seen_at: string;
+  ip: string | null;
+  user_agent: string | null;
+  current: boolean;
+}
+
+/** Tablet de encuestas vinculada (en línea o apagada). */
+export interface OnlineDevice {
+  id: number;
+  name: string;
+  branch_id: number | null;
+  branch_name: string | null;
+  register_id: number | null;
+  register_name: string | null;
+  created_at: string;
+  created_by_name: string | null;
+  last_seen_at: string | null;
+  ip: string | null;
+  user_agent: string | null;
+  pending: number;
+  pending_since: string | null;
+}
+
+export interface OnlineResponse {
+  sessions: OnlineSession[];
+  devices: OnlineDevice[];
+  locks: LoginLock[];
 }
 
 export interface Filters {
   branch_id: string;
   register_id: string;
-  cashier_id: string;
   from: string;
   to: string;
 }

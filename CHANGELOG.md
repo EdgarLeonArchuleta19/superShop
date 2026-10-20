@@ -6,7 +6,31 @@ Todas las versiones notables documentadas aquí. Formato basado en [Keep a Chang
 
 ## [Sin publicar]
 
+### ⚠️ Cambios importantes
+- **Se quitó "Mi encuesta" del menú** y el permiso del mismo nombre: las encuestas ahora se responden solo en tablets vinculadas. `/mi-encuesta` lleva a `/encuestas`.
+- **Al actualizar se cierran todas las sesiones abiertas** (una sola vez): cada persona vuelve a iniciar sesión y cada tablet de encuestas se vincula con el QR nuevo. Las encuestas guardadas sin enviar en los equipos se envían al volver a iniciar sesión.
+
 ### ✨ Nuevo
+- **Registro de accesos rediseñado:** al entrar muestra una sola tabla de dispositivos.
+  - **Qué incluye:** los usuarios conectados ahora y todas las tablets de encuestas vinculadas, también las apagadas.
+  - **Columnas:** tipo (SuperShop o SuperShop Survey), estatus (En línea, Inactivo o Sin conexión), dispositivo, IP y desde cuándo.
+  - **Acciones:** "Desvincular" en cada fila cierra la sesión o desvincula la tablet. Las tablets también tienen "Editar".
+  - **Historial:** los inicios de sesión exitosos y fallidos quedan en "Ver historial completo". Ya no se muestra el país.
+- **SuperShop Survey: tablets vinculadas por QR, sin usuario ni contraseña** (Ajustes → Vincular dispositivos).
+  - **Vincular:** se elige la caja (la tienda se selecciona sola si solo hay una) y se genera un código QR. Al escanearlo, la tablet queda fija a esa caja y arranca directo en la encuesta.
+  - **Sin cajero(a) por ahora:** la tablet no pide quién atiende y las encuestas se guardan solo con tienda y caja. El catálogo de cajeros(as) se conserva.
+  - Estadísticas y Respuestas ya no tienen filtro de cajero(a); Rendimiento muestra solo Cajas (y Sucursales si hay varias). El aviso de calificaciones malas del día agrupa por caja.
+  - **Seguridad:** el QR sirve una sola vez, vence en 5 minutos y se renueva solo mientras la pantalla está abierta. La tablet recibe un token propio que solo sirve para enviar encuestas; el servidor guarda la tienda y la caja de la tablet aunque el envío diga otra cosa.
+  - **Sin salida:** la tablet no tiene botón "Salir" ni acceso al panel. Solo se cambia desvinculándola desde el panel.
+  - **Se instala aparte** como "SuperShop Survey", a pantalla completa y con el logo blanco de SuperShop.
+- **Logo y nombre propios para las tablets:** **SuperShop** (logo de fondo azul) sigue igual para administrar y **SuperShop Survey** (logo blanco) para las tablets de encuestas. Cada QR de Vincular dispositivos lleva su logo al centro.
+- **Avisos de tablets** (notificaciones para quien tiene Vincular dispositivos):
+  - Encuestas guardadas en una tablet que llevan más de 1 hora sin poder enviarse.
+  - Tablet sin conexión por más de 24 horas, contadas solo mientras la computadora principal está encendida.
+  - Un aviso por cada caso, sin repetirse. En la lista de dispositivos se marcan en ámbar.
+  - Con el acceso por enlace privado activo, las tablets siguen entrando aunque se genere un enlace nuevo.
+- Una tablet desvinculada todavía entrega, durante 3 días, las encuestas que respondió antes de desvincularla.
+- Menú de Ajustes: Vincular dispositivos pasa al 4.º lugar e Información al final.
 - **Notificaciones rediseñadas**: se guardan en el servidor y cada usuario tiene su propio estado de leída o borrada.
   - **Acciones:** marcar como leída o no leída, "Marcar todas", borrar una o todas las leídas y filtrar "No leídas". Tocar una notificación abre la pantalla relacionada.
   - **Contador:** se ve en la campana y en la pestaña del navegador.

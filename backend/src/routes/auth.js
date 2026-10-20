@@ -50,8 +50,18 @@ router.post('/login', (req, res) => {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = sessionExpiresAt();
   db.prepare(
-    'INSERT INTO sessions (token, role, user_id, user_name, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(token, user.role, user.id, user.name, now(), expiresAt);
+    'INSERT INTO sessions (token, role, user_id, user_name, created_at, expires_at, ip, user_agent, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(
+    token,
+    user.role,
+    user.id,
+    user.name,
+    now(),
+    expiresAt,
+    ip || null,
+    String(req.headers['user-agent'] || '').slice(0, 300) || null,
+    now()
+  );
   db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(now(), user.id);
   res.json({ token, user: publicUser(user), expires_at: expiresAt });
 });

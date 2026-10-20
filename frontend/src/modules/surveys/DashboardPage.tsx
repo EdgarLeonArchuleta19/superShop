@@ -22,7 +22,6 @@ import { useSettings } from '../../lib/settings';
 import type {
   ActivityResponse,
   Branch,
-  Cashier,
   Filters,
   GroupStats,
   LabeledCount,
@@ -225,21 +224,18 @@ function MiniRankingCaritas({ items }: { items: GroupStats[] }) {
 }
 
 function RankingPanel({
-  byCashier,
   byRegister,
   byBranch,
 }: {
-  byCashier: StatsResponse['byCashier'];
   byRegister: StatsResponse['byRegister'];
   byBranch: StatsResponse['byBranch'];
 }) {
   const dims = useMemo(
     () => [
-      { key: 'cashier', label: 'Cajeros(as)', items: byCashier },
       { key: 'register', label: 'Cajas', items: byRegister },
       ...(byBranch.length > 1 ? [{ key: 'branch', label: 'Sucursales', items: byBranch }] : []),
     ],
-    [byCashier, byRegister, byBranch]
+    [byRegister, byBranch]
   );
   const [active, setActive] = useState(dims[0].key);
   const current = dims.find((d) => d.key === active) ?? dims[0];
@@ -277,7 +273,6 @@ export default function DashboardPage() {
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [registers, setRegisters] = useState<Register[]>([]);
-  const [cashiers, setCashiers] = useState<Cashier[]>([]);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [activity, setActivity] = useState<ActivityResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -286,12 +281,10 @@ export default function DashboardPage() {
   useEffect(() => {
     const branchesReq = api<{ items: Branch[] }>('/api/admin/branches');
     const registersReq = api<{ items: Register[] }>('/api/admin/registers');
-    const cashiersReq = api<{ items: Cashier[] }>('/api/admin/cashiers');
-    Promise.all([branchesReq, registersReq, cashiersReq])
-      .then(([b, r, c]) => {
+    Promise.all([branchesReq, registersReq])
+      .then(([b, r]) => {
         setBranches(b.items);
         setRegisters(r.items);
-        setCashiers(c.items);
       })
       .catch(() => setError('No se pudieron cargar los filtros'));
   }, []);
@@ -345,15 +338,13 @@ export default function DashboardPage() {
     const parts: string[] = [];
     const branch = branches.find((b) => String(b.id) === filters.branch_id);
     const reg = registers.find((r) => String(r.id) === filters.register_id);
-    const cash = cashiers.find((c) => String(c.id) === filters.cashier_id);
     if (branch) parts.push(`Sucursal: ${branch.name}`);
     if (reg) parts.push(`Caja: ${reg.name}`);
-    if (cash) parts.push(`Cajero(a): ${cash.name}`);
     if (filters.from || filters.to) {
       parts.push(`Del ${filters.from || '…'} al ${filters.to || 'hoy'}`);
     }
     return parts.length ? parts.join(' | ') : 'Sin filtros (todo)';
-  }, [branches, registers, cashiers, filters]);
+  }, [branches, registers, filters]);
 
   const fetchRows = useCallback(async () => {
     const res = await api<{ items: Survey[] }>(`/api/admin/surveys?${qs}&limit=5000`, {
@@ -403,7 +394,7 @@ export default function DashboardPage() {
           Estadísticas de satisfacción
         </h1>
         <p className="mt-0.5 text-[13px] text-muted">
-          Resumen por sucursal, caja y cajero(a).
+          Resumen por sucursal y caja.
         </p>
       </div>
 
@@ -412,7 +403,6 @@ export default function DashboardPage() {
         onChange={setFilters}
         branches={branches}
         registers={registers}
-        cashiers={cashiers}
       >
         <button
           onClick={() => {
@@ -554,7 +544,6 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <RankingPanel
-              byCashier={stats.byCashier}
               byRegister={stats.byRegister}
               byBranch={stats.byBranch}
             />
@@ -565,7 +554,7 @@ export default function DashboardPage() {
                   <li key={s.id} className="flex items-center justify-between gap-3 py-2.5">
                     <div className="min-w-0">
                       <p className="truncate text-[13px] font-medium text-ink/85">
-                        {s.cashier_name || s.register_name || 'Caja'}
+                        {s.register_name || s.cashier_name || 'Caja'}
                       </p>
                       <p className="truncate text-[12px] text-muted">{fmtDateTime(s.created_at)}</p>
                     </div>

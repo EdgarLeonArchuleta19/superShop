@@ -26,12 +26,16 @@ import { requirePermission } from './middleware.js';
 import roleRoutes from './routes/roles.js';
 import securityRoutes from './routes/security.js';
 import notificationRoutes from './routes/notifications.js';
+import deviceRoutes from './routes/devices.js';
+import { startDeviceWatch } from './devices.js';
 import { clientIp, originGuard } from './security.js';
 import { accessGate } from './accessGate.js';
 
 await ensureSeed();
 // En la nube (Turso) no hay respaldos en carpeta local: Turso guarda su propio historial.
 if (!CLOUD) scheduleBackups();
+// Avisos de tablets de encuestas con encuestas atoradas o sin conexión.
+startDeviceWatch();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -123,6 +127,7 @@ const batchLimiter = rateLimit({
 });
 
 app.use('/api/auth/login', loginLimiter);
+app.use('/api/devices/pair', loginLimiter);
 app.use('/api/surveys/batch', batchLimiter);
 
 if (process.env.NODE_ENV === 'production') {
@@ -141,6 +146,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api', settingsRoutes);
 app.use('/api', surveyRoutes);
 app.use('/api', tunnelRoutes);
+app.use('/api', deviceRoutes);
 // Respaldos en carpeta, Google Drive e importación: solo en la app de escritorio.
 if (!CLOUD) app.use('/api', backupRoutes);
 app.use('/api/admin', statsRoutes);
@@ -157,7 +163,7 @@ app.use('/api/admin', adminRoutes);
 
 const staticDir = process.env.FRONTEND_DIST || path.join(__dirname, '../../frontend/dist');
 if (fs.existsSync(staticDir)) {
-  const NO_CACHE = new Set(['index.html', 'sw.js', 'manifest.webmanifest', 'registerSW.js']);
+  const NO_CACHE = new Set(['index.html', 'sw.js', 'manifest.webmanifest', 'encuestas.webmanifest', 'registerSW.js']);
   app.use(
     express.static(staticDir, {
       setHeaders(res, filePath) {

@@ -35,8 +35,8 @@ let flushPromise: Promise<FlushResult> | null = null;
 const listeners = new Set<() => void>();
 
 /**
- * Por qué se detuvo el último envío sin poder reintentarlo solo: 'auth' (sesión vencida o
- * sin permiso de Mi encuesta) o 'access' (falta el enlace privado). null = sin problema.
+ * Por qué se detuvo el último envío sin poder reintentarlo solo: 'auth' (tablet desvinculada
+ * o sesión vencida) o 'access' (falta el enlace privado). null = sin problema.
  */
 export type OutboxIssue = 'auth' | 'access' | null;
 let issue: OutboxIssue = null;
@@ -199,8 +199,8 @@ async function sendBatches(
       }
       if (err instanceof ApiError && (err.status === 401 || err.status === 403 || err.status === 404)) {
         issue = err.status === 404 ? 'access' : 'auth';
-        // Sesión vencida o sin permiso: se conservan en la cola (sin contar intento)
-        // y se envían cuando alguien con acceso a "Mi encuesta" vuelva a iniciar sesión.
+        // Tablet desvinculada o sesión vencida: se conservan en la cola (sin contar intento)
+        // y se envían cuando la tablet se vuelva a vincular o alguien inicie sesión.
         // 404: el dispositivo perdió el enlace privado; se envían cuando lo vuelva a abrir.
         break;
       }

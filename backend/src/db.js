@@ -221,7 +221,63 @@ export function ensureSeed() {
     CREATE INDEX IF NOT EXISTS idx_surveys_register ON surveys(register_id);
     CREATE INDEX IF NOT EXISTS idx_surveys_cashier ON surveys(cashier_id);
     CREATE INDEX IF NOT EXISTS idx_surveys_rating ON surveys(rating);
+
+    -- Tablets de "SuperShop Survey": entran sin usuario, con el token que reciben al
+    -- escanear el QR de Vincular dispositivos (ver devices.js). Solo se guarda su hash.
+    CREATE TABLE IF NOT EXISTS devices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT UNIQUE NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'kiosk',
+      name TEXT NOT NULL,
+      branch_id INTEGER REFERENCES branches(id),
+      register_id INTEGER REFERENCES registers(id),
+      created_by INTEGER,
+      created_by_name TEXT,
+      created_at TEXT NOT NULL,
+      last_seen_at TEXT,
+      last_ip TEXT,
+      user_agent TEXT,
+      pending INTEGER NOT NULL DEFAULT 0,
+      pending_since TEXT,
+      revoked_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_devices_revoked ON devices(revoked_at);
+
+    -- Códigos de vinculación del QR: un solo uso y vencen en minutos.
+    CREATE TABLE IF NOT EXISTS device_pairings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code_hash TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      branch_id INTEGER NOT NULL,
+      register_id INTEGER NOT NULL,
+      created_by INTEGER,
+      created_by_name TEXT,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      device_id INTEGER
+    );
   `);
+
+  // Tablets: desde cuándo tienen encuestas sin enviar (aviso de encuestas atoradas).
+  try {
+    db.prepare('ALTER TABLE devices ADD COLUMN pending_since TEXT').run();
+  } catch (e) {
+    if (!String(e.message).includes('duplicate column')) throw e;
+  }
+
+  // Sesiones: datos para "Conectados ahora" en Registro de accesos.
+  const sessionColumns = [
+    { name: 'ip', type: 'TEXT' },
+    { name: 'user_agent', type: 'TEXT' },
+    { name: 'last_seen_at', type: 'TEXT' },
+  ];
+  for (const col of sessionColumns) {
+    try {
+      db.prepare(`ALTER TABLE sessions ADD COLUMN ${col.name} ${col.type}`).run();
+    } catch (e) {
+      if (!String(e.message).includes('duplicate column')) throw e;
+    }
+  }
 
   const backupColumns = [
     { name: 'backup_enabled', type: 'INTEGER NOT NULL DEFAULT 1' },
@@ -251,6 +307,9 @@ export function ensureSeed() {
     // Acceso solo con enlace privado (ver accessGate.js).
     { name: 'access_gate', type: 'INTEGER NOT NULL DEFAULT 0' },
     { name: 'access_key', type: 'TEXT' },
+    // Una sola vez al llegar las tablets de encuestas: se cierran las sesiones abiertas
+    // para que cada dispositivo se vuelva a vincular.
+    { name: 'devices_reset_done', type: 'INTEGER NOT NULL DEFAULT 0' },
   ];
   for (const col of backupColumns) {
     try {
@@ -267,6 +326,12 @@ export function ensureSeed() {
         backup_enabled, backup_frequency, backup_google_drive_enabled, backup_local_enabled)
        VALUES (1, ?, ?, ?, ?, 1, 'weekly', 0, 1)`
     ).run('SuperShop', 'Administración de tiendas', null, now());
+  }
+
+  if (!db.prepare('SELECT devices_reset_done FROM settings WHERE id = 1').get().devices_reset_done) {
+    const closed = db.prepare('UPDATE sessions SET closed_at = ? WHERE closed_at IS NULL').run(now()).changes;
+    db.prepare('UPDATE settings SET devices_reset_done = 1 WHERE id = 1').run();
+    if (closed) console.log(`[Dispositivos] Sesiones abiertas cerradas: ${closed}. Cada dispositivo debe vincularse de nuevo.`);
   }
 
   // Usuarios iniciales: solo en la primera instalación (sin ningún usuario). Antes se

@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { db, now } from '../db.js';
 import { questions } from '../questions.js';
-import { getSession, requirePermission } from '../middleware.js';
+import { getSession } from '../middleware.js';
+import { acceptedFromDevice, requireSurveySender } from '../devices.js';
 import { notify } from '../notifications.js';
 import { localDate } from '../store.js';
 
@@ -39,13 +40,16 @@ function lookupName(kind, id, given) {
   return nameStatements[kind].get(Number(id))?.name ?? null;
 }
 
-/** Un aviso por día con las calificaciones malas; cada nueva lo vuelve a marcar como no leído. */
+/**
+ * Un aviso por día con las calificaciones malas, por caja (las tablets ya no eligen
+ * cajero(a)); cada nueva lo vuelve a marcar como no leído.
+ */
 function notifyBadRatings() {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   const rows = db
     .prepare(
-      `SELECT COALESCE(cashier_name, 'Sin cajero(a)') AS name, COUNT(*) AS c FROM surveys
+      `SELECT COALESCE(register_name, 'Sin caja') AS name, COUNT(*) AS c FROM surveys
        WHERE rating = 'bad' AND created_at >= ? GROUP BY name ORDER BY c DESC`
     )
     .all(start.toISOString());
@@ -59,7 +63,7 @@ function notifyBadRatings() {
     kind: 'surveys',
     tone: 'warning',
     title: total === 1 ? 'Calificación mala hoy' : `${total} calificaciones malas hoy`,
-    message: `Por cajero(a): ${top}${rows.length > 3 ? '…' : ''}.`,
+    message: `Por caja: ${top}${rows.length > 3 ? '…' : ''}.`,
     link: '/app/encuestas/respuestas',
     audience: 'surveys.responses',
     dedupeKey: `bad-ratings:${localDate(start.toISOString())}`,
@@ -69,7 +73,8 @@ function notifyBadRatings() {
 /**
  * Recibe encuestas del kiosko en lotes (también las que se guardaron sin conexión y se
  * envían al volver la red). Cada una trae un client_uuid: si ya se recibió, se ignora,
- * así que reenviar un lote nunca duplica datos.
+ * así que reenviar un lote nunca duplica datos. Si las manda una tablet vinculada, la
+ * tienda y la caja son siempre las de esa tablet.
  */
 function saveBatch(req, res) {
   const { items } = req.body || {};
@@ -85,6 +90,7 @@ function saveBatch(req, res) {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
+  const device = req.device ?? null;
   let accepted = 0;
   let badAccepted = 0;
   const invalidUuids = [];
@@ -98,7 +104,7 @@ function saveBatch(req, res) {
       continue;
     }
     const rating = normalizeRating(item.rating);
-    if (!rating) {
+    if (!rating || (device && !acceptedFromDevice(device, item))) {
       invalidUuids.push(uuid);
       continue;
     }
@@ -106,12 +112,14 @@ function saveBatch(req, res) {
     const dislikes = Array.isArray(item.dislikes) ? item.dislikes.filter((a) => validOptions.has(a)) : [];
     const likes = Array.isArray(item.likes) ? item.likes.filter((a) => validOptions.has(a)) : [];
     const created = item.created_at || item.client_ts || now();
+    const branchId = device ? device.branch_id : (item.branch_id ?? null);
+    const registerId = device ? device.register_id : (item.register_id ?? null);
     const info = insert.run(
       uuid,
-      item.branch_id ?? null,
-      lookupName('branch', item.branch_id, item.branch_name),
-      item.register_id ?? null,
-      lookupName('register', item.register_id, item.register_name),
+      branchId,
+      lookupName('branch', branchId, device ? null : item.branch_name),
+      registerId,
+      lookupName('register', registerId, device ? null : item.register_name),
       item.cashier_id ?? null,
       lookupName('cashier', item.cashier_id, item.cashier_name),
       JSON.stringify(areas),
@@ -135,11 +143,11 @@ function saveBatch(req, res) {
   });
 }
 
-// Solo usuarios con sesión y acceso a "Mi encuesta" pueden enviar encuestas (con la
-// dirección pública, si no, cualquiera podría llenar la base de respuestas falsas).
+// Solo tablets vinculadas (o usuarios con sesión) pueden enviar encuestas: con la dirección
+// pública, si no, cualquiera podría llenar la base de respuestas falsas.
 // /surveys/batch es la que usa el kiosko (tiene su propio límite de solicitudes).
-router.post('/surveys', requirePermission('surveys.kiosk'), saveBatch);
-router.post('/surveys/batch', requirePermission('surveys.kiosk'), saveBatch);
+router.post('/surveys', requireSurveySender, saveBatch);
+router.post('/surveys/batch', requireSurveySender, saveBatch);
 
 router.get('/surveys/last', (req, res) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
