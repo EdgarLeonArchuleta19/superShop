@@ -36,6 +36,7 @@ import { Spinner } from '../../components/Modal';
 import { IconDownload, IconRefresh } from '../../components/Icons';
 import FaceIcon from '../../components/FaceIcon';
 import {
+  NO_RATING_LABEL,
   RATING_META,
   RATING_ORDER,
   isRatingValue,
@@ -144,11 +145,15 @@ function HorizontalBars({ items, color = BRAND }: { items: LabeledCount[]; color
 
 function CaritasPie({ counts }: { counts: RatingCounts }) {
   const { tooltipStyle } = useChartTheme();
-  const data = RATING_ORDER.map((v) => ({
-    name: RATING_META[v].label,
-    value: counts[v],
-    color: RATING_META[v].color,
-  })).filter((d) => d.value > 0);
+  const data = [
+    ...RATING_ORDER.map((v) => ({
+      name: RATING_META[v].label,
+      value: counts[v],
+      color: RATING_META[v].color,
+    })),
+    // No tocaron ninguna carita (contestaron la pregunta anterior).
+    { name: NO_RATING_LABEL, value: counts.none, color: '#94a3b8' },
+  ].filter((d) => d.value > 0);
   if (!data.length) {
     return <p className="py-8 text-center text-sm text-muted">Sin calificaciones en este rango.</p>;
   }
@@ -570,7 +575,7 @@ export default function DashboardPage() {
                         <span>{ratingLabel(s.rating)}</span>
                       </span>
                     ) : (
-                      <span className="shrink-0 text-[12px] text-muted">Sin calificación</span>
+                      <span className="shrink-0 text-[12px] text-muted">{NO_RATING_LABEL}</span>
                     )}
                   </li>
                 ))}

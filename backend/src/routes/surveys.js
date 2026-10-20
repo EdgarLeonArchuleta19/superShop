@@ -10,8 +10,14 @@ const router = Router();
 const validOptions = new Set();
 for (const q of questions.questions) for (const o of q.options) validOptions.add(o);
 
+/**
+ * 'good' | 'regular' | 'bad', o 'none' si no tocaron ninguna carita (el kiosko la manda
+ * sin calificación a los pocos segundos; las respuestas anteriores sí cuentan). Un valor
+ * que no se reconoce devuelve null y la encuesta se rechaza.
+ */
 function normalizeRating(value) {
-  if (value === 'good' || value === 'regular' || value === 'bad') return value;
+  if (value === 'good' || value === 'regular' || value === 'bad' || value === 'none') return value;
+  if (value === null || value === undefined || value === '') return 'none';
   const n = Number(value);
   if (n >= 4) return 'good';
   if (n === 3) return 'regular';

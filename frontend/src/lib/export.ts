@@ -1,5 +1,5 @@
 import type { Survey } from './types';
-import { isRatingValue, ratingLabel } from './rating';
+import { ratingLabel } from './rating';
 import { storeInitials } from './format';
 
 function fmtDate(iso: string): string {
@@ -28,7 +28,7 @@ function toRows(surveys: Survey[]) {
     'Áreas a mejorar': s.areas.join(', '),
     'No gustó': s.dislikes.join(', '),
     'Por qué les gusta': s.likes.join(', '),
-    Calificación: isRatingValue(s.rating) ? ratingLabel(s.rating) : 'Sin calificación',
+    Calificación: ratingLabel(s.rating),
   }));
 }
 
@@ -193,7 +193,7 @@ export async function exportPdf(surveys: Survey[], opts: PdfOptions = {}): Promi
     s.areas.join(', '),
     s.dislikes.join(', '),
     s.likes.join(', '),
-    isRatingValue(s.rating) ? ratingLabel(s.rating) : 'Sin calificación',
+    ratingLabel(s.rating),
   ]);
 
   autoTable(doc, {

@@ -9,7 +9,7 @@ import Pagination from '../../components/Pagination';
 import { Spinner } from '../../components/Modal';
 import { IconDownload, IconRefresh } from '../../components/Icons';
 import FaceIcon from '../../components/FaceIcon';
-import { isRatingValue, normalizeRating, ratingLabel } from '../../lib/rating';
+import { isRatingValue, normalizeRating, NO_RATING_LABEL, ratingLabel } from '../../lib/rating';
 
 export default function SurveysPage() {
   const { settings } = useSettings();
@@ -223,7 +223,7 @@ export default function SurveysPage() {
                         <span>{ratingLabel(s.rating)}</span>
                       </span>
                     ) : (
-                      <span className="text-[13px] text-muted">Sin calificación</span>
+                      <span className="text-[13px] text-muted">{NO_RATING_LABEL}</span>
                     )}
                       </td>
                     </tr>

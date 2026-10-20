@@ -15,7 +15,7 @@ export const RATING_META: Record<RatingValue, RatingMeta> = {
   bad: { value: 'bad', label: 'Mala', color: '#ef4444', soft: 'rgba(239, 68, 68, 0.14)' },
 };
 
-export const NO_RATING_LABEL = 'Sin calificación';
+export const NO_RATING_LABEL = 'Sin respuesta';
 
 export function isRatingValue(value: unknown): value is RatingValue {
   return value === 'good' || value === 'regular' || value === 'bad';

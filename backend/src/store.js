@@ -14,7 +14,8 @@ export function mapSurvey(row) {
     areas: parseJson(row.areas, []),
     dislikes: parseJson(row.dislikes, []),
     likes: parseJson(row.likes, []),
-    rating: row.rating,
+    // 'none' = no tocaron ninguna carita: la API lo entrega como null ("Sin respuesta").
+    rating: row.rating === 'none' ? null : row.rating,
     created_at: row.created_at,
     client_ts: row.client_ts,
   };

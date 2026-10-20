@@ -110,6 +110,30 @@ export function enqueueSurvey(payload: SurveyPayload): void {
   write(items);
 }
 
+let unratedRecovered = false;
+
+/**
+ * Antes el servidor rechazaba como inválidas las encuestas sin carita (nadie tocó ninguna).
+ * Ahora las acepta como "Sin respuesta": las que quedaron como fallidas por eso vuelven a
+ * la cola una vez, para que no se pierdan sus respuestas.
+ */
+function recoverUnratedFailed(): void {
+  if (unratedRecovered) return;
+  unratedRecovered = true;
+  const failed = readFailed();
+  const unrated = failed.filter((f) => f.reason === 'invalid' && f.payload.rating == null);
+  if (!unrated.length) return;
+  const queued = read();
+  const items = [
+    ...queued,
+    ...unrated
+      .filter((f) => !queued.some((q) => q.uuid === f.uuid))
+      .map((f) => ({ uuid: f.uuid, payload: f.payload, queuedAt: f.queuedAt, attempts: 0 })),
+  ];
+  write(items);
+  writeFailed(failed.filter((f) => !unrated.includes(f)));
+}
+
 /** Devuelve las encuestas fallidas a la cola para reintentar su envío. */
 export function retryFailed(): void {
   const failed = readFailed();
@@ -200,6 +224,7 @@ async function sendBatches(
 }
 
 export async function flushOutbox(): Promise<FlushResult> {
+  recoverUnratedFailed();
   const items = read();
   const failed = getFailedCount();
   if (!items.length) return { sent: 0, pending: 0, failed, online: true };
