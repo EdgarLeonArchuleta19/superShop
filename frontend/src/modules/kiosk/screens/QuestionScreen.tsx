@@ -17,7 +17,6 @@ const OPTION_EMOJI: Record<string, Record<string, string>> = {
     Atención: '🙁',
     'Tiempo de espera': '⏳',
     'Ninguna, todo bien': '👍',
-    'Nada me gustó': '👎',
   },
   likes: {
     Precios: '🏷️',
@@ -88,24 +87,19 @@ export default function QuestionScreen({ question, selected, onToggle, onNext, o
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-line py-3">
-        {selected.length === 0 && (
-          <p className="mb-2 text-center text-[12px] text-muted">
-            Elige al menos una opción para continuar
-          </p>
-        )}
-        <div className="flex items-center justify-between gap-3">
-          <button onClick={onBack} className="btn-ghost h-12 px-4 text-sm">
-            <IconChevronLeft className="h-4 w-4" />
+      <div className="shrink-0 border-t border-line py-4">
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4">
+          <button onClick={onBack} className="btn-ghost h-16 flex-1 px-5 text-base sm:text-lg">
+            <IconChevronLeft className="h-6 w-6" />
             Atrás
           </button>
           <button
             onClick={onNext}
             disabled={selected.length === 0}
-            className="group btn-primary h-12 px-7 text-sm"
+            className="group btn-primary h-16 flex-1 px-5 text-base sm:text-lg"
           >
             Siguiente
-            <IconChevronRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+            <IconChevronRight className="h-6 w-6 transition group-hover:translate-x-0.5" />
           </button>
         </div>
       </div>

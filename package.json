@@ -1,0 +1,53 @@
+{
+  "name": "supershop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SuperShop - Sistema de gestión de satisfacción del cliente",
+  "author": "ELAN Software",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "postinstall": "electron-builder install-app-deps",
+    "start": "electron electron/main.cjs",
+    "get:cloudflared": "node scripts/get-cloudflared.mjs",
+    "dist:win": "node scripts/get-cloudflared.mjs && electron-builder --win --x64",
+    "build:dir": "node scripts/get-cloudflared.mjs && electron-builder --win --x64 --dir"
+  },
+  "build": {
+    "appId": "com.elansoftware.supershop",
+    "productName": "SuperShop",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "backend/src/**/*",
+      "backend/package.json",
+      "backend/node_modules/**/*",
+      "frontend/dist/**/*",
+      "frontend/assets/icon-512.png"
+    ],
+    "asar": false,
+    "asarUnpack": [
+      "backend/**/*",
+      "frontend/dist/**/*",
+      "frontend/assets/**/*",
+      "electron/bin/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "frontend/assets/icon-512.png",
+      "artifactName": "SuperShop-${version}.${ext}"
+    },
+    "compression": "maximum"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.1",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3"
+  }
+}

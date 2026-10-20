@@ -1,20 +1,10 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { api, ApiError, NetError, clearToken, setToken } from './api';
 import type { AuthUser, UserRole } from './types';
+import { can as canUser } from './permissions';
 
 const SESSION_KEY = 'nallely.session.user';
-
-/** Cierre automático por inactividad. 30 minutos. */
-const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
-const IDLE_EVENTS = [
-  'mousemove',
-  'mousedown',
-  'keydown',
-  'wheel',
-  'scroll',
-  'touchstart',
-] as const;
 
 type Role = UserRole | null;
 
@@ -22,16 +12,28 @@ interface AuthContextValue {
   role: Role;
   user: AuthUser | null;
   ready: boolean;
-  login: (email: string, password: string) => Promise<AuthUser>;
+  login: (username: string, password: string) => Promise<AuthUser>;
   logout: (reason?: string) => Promise<void>;
+  /** ¿El usuario actual tiene este permiso? Ver lib/permissions.ts. */
+  can: (perm?: string) => boolean;
+  /** Vuelve a leer rol y permisos del servidor (los cambios a un rol aplican sin re-login). */
+  refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 function readUser(): AuthUser | null {
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
-    return raw ? (JSON.parse(raw) as AuthUser) : null;
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const user = JSON.parse(raw) as AuthUser;
+    // Sesiones guardadas antes de los roles configurables: se completan al refrescar /me.
+    if (!Array.isArray(user.permissions)) {
+      user.permissions = [];
+      user.is_admin = user.role === 'admin';
+      user.role_name = user.role === 'admin' ? 'Administrador' : 'Cajero(a)';
+    }
+    return user;
   } catch {
     return null;
   }
@@ -39,7 +41,7 @@ function readUser(): AuthUser | null {
 
 function writeUser(user: AuthUser): void {
   try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+    localStorage.setItem(SESSION_KEY, JSON.stringify(user));
   } catch {
     /* ignorar */
   }
@@ -47,7 +49,7 @@ function writeUser(user: AuthUser): void {
 
 function clearUser(): void {
   try {
-    sessionStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_KEY);
   } catch {
     /* ignorar */
   }
@@ -85,16 +87,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (username: string, password: string) => {
     const res = await api<{ token: string; user: AuthUser }>('/api/auth/login', {
       method: 'POST',
-      body: { email, password },
+      body: { username, password },
     });
     setToken(res.token);
     writeUser(res.user);
     setUser(res.user);
     return res.user;
   }, []);
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await api<{ user: AuthUser }>('/api/auth/me');
+      writeUser(res.user);
+      setUser(res.user);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearToken();
+        clearUser();
+        setUser(null);
+      }
+    }
+  }, []);
+
+  const can = useCallback((perm?: string) => canUser(user, perm), [user]);
 
   const logout = useCallback(async (reason = 'logout') => {
     try {
@@ -109,33 +127,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
-  const logoutRef = useRef(logout);
-  useEffect(() => {
-    logoutRef.current = logout;
-  }, [logout]);
-
-  // Auto-cierre por inactividad.
-  useEffect(() => {
-    if (!user) return;
-    let timer = window.setTimeout(() => void logoutRef.current('idle'), IDLE_TIMEOUT_MS);
-    let last = Date.now();
-    const reset = () => {
-      const now = Date.now();
-      if (now - last < 5000) return;
-      last = now;
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => void logoutRef.current('idle'), IDLE_TIMEOUT_MS);
-    };
-    for (const ev of IDLE_EVENTS) window.addEventListener(ev, reset, { passive: true });
-    return () => {
-      window.clearTimeout(timer);
-      for (const ev of IDLE_EVENTS) window.removeEventListener(ev, reset);
-    };
-  }, [user]);
-
   const value = useMemo(
-    () => ({ role: user?.role ?? null, user, ready, login, logout }),
-    [user, ready, login, logout]
+    () => ({ role: user?.role ?? null, user, ready, login, logout, can, refresh }),
+    [user, ready, login, logout, can, refresh]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

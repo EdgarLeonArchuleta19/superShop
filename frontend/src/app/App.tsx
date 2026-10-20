@@ -4,9 +4,9 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { AuthProvider, useAuth } from '../lib/auth';
 import { ThemeProvider } from '../lib/theme';
 import { ToastProvider } from '../lib/toast';
-import { SettingsProvider } from '../lib/settings';
+import { SettingsProvider, useSettings } from '../lib/settings';
 import { flushOutbox, getPendingCount } from '../lib/offline';
-import type { UserRole } from '../lib/types';
+import { homePath } from '../lib/permissions';
 import Splash from '../components/Splash';
 import { Spinner } from '../components/Modal';
 import LoginPage from '../modules/auth/LoginPage';
@@ -20,7 +20,12 @@ const BranchesPage = lazy(() => import('../modules/catalog/BranchesPage'));
 const RegistersPage = lazy(() => import('../modules/catalog/RegistersPage'));
 const CashiersPage = lazy(() => import('../modules/catalog/CashiersPage'));
 const InfoSettingsPage = lazy(() => import('../modules/settings/InfoSettingsPage'));
-const AdminSettingsPage = lazy(() => import('../modules/settings/AdminSettingsPage'));
+const ProfilePage = lazy(() => import('../modules/settings/ProfilePage'));
+const UsersPage = lazy(() => import('../modules/settings/UsersPage'));
+const BackupsPage = lazy(() => import('../modules/settings/BackupsPage'));
+const ConnectPage = lazy(() => import('../modules/settings/ConnectPage'));
+const RolesPage = lazy(() => import('../modules/settings/RolesPage'));
+const InstallPage = lazy(() => import('../modules/install/InstallPage'));
 
 function RouteFallback() {
   return (
@@ -59,9 +64,18 @@ function RequireAuth({ children }: { children: ReactElement }) {
   return children;
 }
 
-function RoleGate({ roles, children }: { roles: UserRole[]; children: ReactElement }) {
-  const { role } = useAuth();
-  if (!role || !roles.includes(role)) return <Navigate to="/app" replace />;
+/** Pantallas que solo existen en la app de escritorio: en la versión web se vuelve al inicio. */
+function DesktopOnly({ children }: { children: ReactElement }) {
+  const { user } = useAuth();
+  const { settings } = useSettings();
+  if (settings.cloud) return <Navigate to={homePath(user)} replace />;
+  return children;
+}
+
+/** Solo deja pasar si el rol del usuario tiene el permiso; si no, lo manda a su pantalla de inicio. */
+function PermGate({ perm, children }: { perm: string; children: ReactElement }) {
+  const { user, can } = useAuth();
+  if (!can(perm)) return <Navigate to={homePath(user)} replace />;
   return children;
 }
 
@@ -72,11 +86,14 @@ function AnimatedRoutes() {
       <Routes location={location}>
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/instalar" element={<InstallPage />} />
       <Route
         path="/mi-encuesta"
         element={
           <RequireAuth>
-            <KioskPage />
+            <PermGate perm="surveys.kiosk">
+              <KioskPage />
+            </PermGate>
           </RequireAuth>
         }
       />
@@ -88,47 +105,95 @@ function AnimatedRoutes() {
           </RequireAuth>
         }
       >
-        <Route index element={<PanelPage />} />
+        <Route
+          index
+          element={
+            <PermGate perm="panel">
+              <PanelPage />
+            </PermGate>
+          }
+        />
         <Route
           path="encuestas/respuestas"
           element={
-            <RoleGate roles={['admin']}>
+            <PermGate perm="surveys.responses">
               <SurveysPage />
-            </RoleGate>
+            </PermGate>
           }
         />
-        <Route path="encuestas/estadisticas" element={<DashboardPage />} />
+        <Route
+          path="encuestas/estadisticas"
+          element={
+            <PermGate perm="surveys.stats">
+              <DashboardPage />
+            </PermGate>
+          }
+        />
         <Route
           path="catalogos/tiendas"
           element={
-            <RoleGate roles={['admin']}>
+            <PermGate perm="catalog.branches">
               <BranchesPage />
-            </RoleGate>
+            </PermGate>
           }
         />
         <Route
           path="catalogos/cajas"
           element={
-            <RoleGate roles={['admin']}>
+            <PermGate perm="catalog.registers">
               <RegistersPage />
-            </RoleGate>
+            </PermGate>
           }
         />
         <Route
           path="catalogos/cajeros"
           element={
-            <RoleGate roles={['admin']}>
+            <PermGate perm="catalog.cashiers">
               <CashiersPage />
-            </RoleGate>
+            </PermGate>
           }
         />
-        <Route path="ajustes/informacion" element={<InfoSettingsPage />} />
+        <Route path="ajustes/perfil" element={<ProfilePage />} />
         <Route
-          path="ajustes/administrador"
+          path="ajustes/usuarios"
           element={
-            <RoleGate roles={['admin']}>
-              <AdminSettingsPage />
-            </RoleGate>
+            <PermGate perm="settings.users">
+              <UsersPage />
+            </PermGate>
+          }
+        />
+        <Route
+          path="ajustes/roles"
+          element={
+            <PermGate perm="admin">
+              <RolesPage />
+            </PermGate>
+          }
+        />
+        <Route
+          path="ajustes/respaldos"
+          element={
+            <PermGate perm="settings.backups">
+              <DesktopOnly>
+                <BackupsPage />
+              </DesktopOnly>
+            </PermGate>
+          }
+        />
+        <Route
+          path="ajustes/informacion"
+          element={
+            <PermGate perm="settings.info">
+              <InfoSettingsPage />
+            </PermGate>
+          }
+        />
+        <Route
+          path="ajustes/conectar"
+          element={
+            <PermGate perm="settings.connect">
+              <ConnectPage />
+            </PermGate>
           }
         />
       </Route>

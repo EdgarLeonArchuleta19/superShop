@@ -2,13 +2,19 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../lib/api';
 import { fmtDateTime } from '../../lib/format';
 import { exportExcel, exportPdf } from '../../lib/export';
+import { useSettings } from '../../lib/settings';
 import type { Branch, Cashier, Filters, Register, Survey } from '../../lib/types';
 import FilterBar, { defaultFilters } from './components/FilterBar';
 import Pagination from '../../components/Pagination';
 import { Spinner } from '../../components/Modal';
-import { IconDownload, IconStar } from '../../components/Icons';
+import { IconDownload, IconRefresh } from '../../components/Icons';
+import FaceIcon from '../../components/FaceIcon';
+import { isRatingValue, normalizeRating, ratingLabel } from '../../lib/rating';
 
 export default function SurveysPage() {
+  const { settings } = useSettings();
+  const storeInfo = { name: settings.store_name, logo: settings.store_logo };
+
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [registers, setRegisters] = useState<Register[]>([]);
@@ -21,7 +27,7 @@ export default function SurveysPage() {
 
   useEffect(() => {
     Promise.all([
-      api<{ items: Branch[] }>('/api/branches?active=0', { role: 'admin' }),
+      api<{ items: Branch[] }>('/api/admin/branches', { role: 'admin' }),
       api<{ items: Register[] }>('/api/admin/registers', { role: 'admin' }),
       api<{ items: Cashier[] }>('/api/admin/cashiers', { role: 'admin' }),
     ])
@@ -59,6 +65,11 @@ export default function SurveysPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const id = setInterval(() => load(), 12000);
+    return () => clearInterval(id);
+  }, [load]);
+
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const current = Math.min(page, totalPages);
   const slice = rows.slice((current - 1) * pageSize, current * pageSize);
@@ -76,23 +87,28 @@ export default function SurveysPage() {
   };
 
   const onExcel = () =>
-    void exportExcel(rows, `encuestas-super-nallely-${new Date().toISOString().slice(0, 10)}`);
+    void exportExcel(rows);
   const onPdf = () =>
     void exportPdf(rows, {
       title: 'Listado de encuestas',
       subtitle: describe(),
-      summary: [
-        { label: 'Total', value: String(rows.length) },
-        {
-          label: 'Promedio',
-          value:
-            rows.length
-              ? (
-                  rows.reduce((s, r) => s + r.rating, 0) / rows.length
-                ).toFixed(1)
-              : '—',
-        },
-      ],
+      store: storeInfo,
+        summary: [
+          { label: 'Total', value: String(rows.length) },
+          {
+            label: 'Calificaciones',
+            value: (() => {
+              const counts = { good: 0, regular: 0, bad: 0 };
+              for (const r of rows) {
+                const v = normalizeRating(r.rating);
+                if (v) counts[v]++;
+              }
+              const total = counts.good + counts.regular + counts.bad;
+              if (!total) return '—';
+              return `Buena: ${counts.good}, Regular: ${counts.regular}, Mala: ${counts.bad}`;
+            })(),
+          },
+        ],
     });
 
   const chip = (values: string[]) => (
@@ -123,6 +139,14 @@ export default function SurveysPage() {
         registers={registers}
         cashiers={cashiers}
       >
+        <button
+          onClick={() => load()}
+          className="btn h-[38px] px-4 text-sm"
+          disabled={loading}
+        >
+          <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline">Actualizar</span>
+        </button>
         <button
           onClick={onExcel}
           className="btn h-[38px] bg-emerald-600 px-4 text-sm text-white hover:bg-emerald-700"
@@ -169,7 +193,7 @@ export default function SurveysPage() {
                     <th className="px-5 py-3.5 font-semibold">Áreas a mejorar</th>
                     <th className="px-5 py-3.5 font-semibold">No gustó</th>
                     <th className="px-5 py-3.5 font-semibold">Por qué viene</th>
-                    <th className="px-5 py-3.5 text-right font-semibold">★</th>
+                    <th className="px-5 py-3.5 text-right font-semibold">Carita</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-hairline">
@@ -197,10 +221,14 @@ export default function SurveysPage() {
                         {chip(s.likes)}
                       </td>
                       <td className="px-5 py-4 text-right">
-                        <span className="inline-flex items-center gap-1 font-semibold text-amber-500">
-                          <IconStar filled className="h-4 w-4" />
-                          <span className="tabular-nums">{s.rating}</span>
-                        </span>
+                    {isRatingValue(s.rating) ? (
+                      <span className="inline-flex items-center gap-1.5 font-semibold">
+                        <FaceIcon value={s.rating} className="h-4 w-4" />
+                        <span>{ratingLabel(s.rating)}</span>
+                      </span>
+                    ) : (
+                      <span className="text-[13px] text-muted">Sin calificación</span>
+                    )}
                       </td>
                     </tr>
                   ))}

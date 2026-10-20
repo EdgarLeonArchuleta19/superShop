@@ -24,12 +24,11 @@ export const questions = {
         'Atención',
         'Tiempo de espera',
         'Ninguna, todo bien',
-        'Nada me gustó',
       ],
     },
     {
       id: 'likes',
-      title: '¿Por qué te gusta venir a Super Nallely?',
+      title: '¿Por qué te gusta venir a esta tienda?',
       help: 'Elige una o varias opciones',
       options: [
         'Precios',
@@ -43,8 +42,12 @@ export const questions = {
   ],
   rating: {
     id: 'rating',
-    title: '¿Cómo calificarías la atención general?',
-    help: 'Toca las estrellas',
-    labels: ['Malo', 'Regular', 'Bueno', 'Muy bueno', 'Excelente'],
+    title: '¿Cómo te atendí?',
+    help: 'Toca la carita que mejor te represente',
+    options: [
+      { value: 'good', label: 'Buena' },
+      { value: 'regular', label: 'Regular' },
+      { value: 'bad', label: 'Mala' },
+    ],
   },
 };

@@ -5,37 +5,46 @@ import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
 import { sessionLabel, timeAgo } from '../lib/format';
 import { useSettings } from '../lib/settings';
-import type { ActivityResponse, UserRole } from '../lib/types';
+import type { ActivityResponse, AuthUser } from '../lib/types';
+import { can } from '../lib/permissions';
 import { ThemeToggleButton, ConfirmDialog } from '../components/Modal';
 import {
+  IconBarChart2,
   IconBell,
   IconChevronDown,
   IconChevronRight,
   IconClipboard,
+  IconCloudCheck,
+  IconFileArchive,
   IconGrid,
+  IconImage,
   IconInfo,
-  IconLock,
   IconLogout,
   IconMenu,
   IconRegister,
   IconSettings,
+  IconShield,
   IconStore,
   IconUser,
+  IconUsers,
   IconX,
 } from '../components/Icons';
 
 type IconType = (p: { className?: string }) => React.ReactElement;
 
+/** `perm`: permiso requerido (lib/permissions.ts). Sin `perm` lo ve todo usuario; `'admin'` solo el Administrador. */
 interface Leaf {
   to: string;
   label: string;
   icon: IconType;
-  roles: UserRole[];
+  perm?: string;
   external?: boolean;
+  /** Solo existe en la app de escritorio (se oculta en la versión web). */
+  desktopOnly?: boolean;
 }
 type MenuEntry =
-  | { kind: 'link'; to: string; label: string; icon: IconType; end?: boolean; roles: UserRole[] }
-  | { kind: 'group'; id: string; label: string; icon: IconType; roles: UserRole[]; children: Leaf[] };
+  | { kind: 'link'; to: string; label: string; icon: IconType; end?: boolean; perm?: string }
+  | { kind: 'group'; id: string; label: string; icon: IconType; children: Leaf[] };
 
 const MENU: MenuEntry[] = [
   {
@@ -44,18 +53,17 @@ const MENU: MenuEntry[] = [
     label: 'Panel de control',
     icon: IconGrid,
     end: true,
-    roles: ['admin', 'cashier'],
+    perm: 'panel',
   },
   {
     kind: 'group',
     id: 'encuestas',
     label: 'Encuestas',
     icon: IconClipboard,
-    roles: ['admin', 'cashier'],
     children: [
-      { to: '/app/encuestas/estadisticas', label: 'Estadísticas', icon: IconGrid, roles: ['admin', 'cashier'] },
-      { to: '/mi-encuesta', label: 'Mi encuesta', icon: IconUser, roles: ['admin', 'cashier'], external: true },
-      { to: '/app/encuestas/respuestas', label: 'Respuestas', icon: IconClipboard, roles: ['admin'] },
+      { to: '/app/encuestas/estadisticas', label: 'Estadísticas', icon: IconBarChart2, perm: 'surveys.stats' },
+      { to: '/mi-encuesta', label: 'Mi encuesta', icon: IconUser, perm: 'surveys.kiosk', external: true },
+      { to: '/app/encuestas/respuestas', label: 'Respuestas', icon: IconFileArchive, perm: 'surveys.responses' },
     ],
   },
   {
@@ -63,11 +71,10 @@ const MENU: MenuEntry[] = [
     id: 'catalogos',
     label: 'Catálogos',
     icon: IconStore,
-    roles: ['admin'],
     children: [
-      { to: '/app/catalogos/tiendas', label: 'Tiendas', icon: IconStore, roles: ['admin'] },
-      { to: '/app/catalogos/cajas', label: 'Cajas', icon: IconRegister, roles: ['admin'] },
-      { to: '/app/catalogos/cajeros', label: 'Cajeros(as)', icon: IconUser, roles: ['admin'] },
+      { to: '/app/catalogos/tiendas', label: 'Tiendas', icon: IconImage, perm: 'catalog.branches' },
+      { to: '/app/catalogos/cajas', label: 'Cajas', icon: IconRegister, perm: 'catalog.registers' },
+      { to: '/app/catalogos/cajeros', label: 'Cajeros(as)', icon: IconUsers, perm: 'catalog.cashiers' },
     ],
   },
   {
@@ -75,10 +82,13 @@ const MENU: MenuEntry[] = [
     id: 'ajustes',
     label: 'Ajustes',
     icon: IconSettings,
-    roles: ['admin', 'cashier'],
     children: [
-      { to: '/app/ajustes/informacion', label: 'Información', icon: IconInfo, roles: ['admin', 'cashier'] },
-      { to: '/app/ajustes/administrador', label: 'Administrador', icon: IconLock, roles: ['admin'] },
+      { to: '/app/ajustes/perfil', label: 'Perfil', icon: IconUser },
+      { to: '/app/ajustes/usuarios', label: 'Usuarios', icon: IconUsers, perm: 'settings.users' },
+      { to: '/app/ajustes/roles', label: 'Roles y permisos', icon: IconShield, perm: 'admin' },
+      { to: '/app/ajustes/respaldos', label: 'Respaldos e Importaciones', icon: IconFileArchive, perm: 'settings.backups', desktopOnly: true },
+      { to: '/app/ajustes/informacion', label: 'Información', icon: IconInfo, perm: 'settings.info' },
+      { to: '/app/ajustes/conectar', label: 'Vincular dispositivos', icon: IconCloudCheck, perm: 'settings.connect' },
     ],
   },
 ];
@@ -90,14 +100,24 @@ const TITLES: Record<string, string> = {
   '/app/catalogos/tiendas': 'Tiendas',
   '/app/catalogos/cajas': 'Cajas',
   '/app/catalogos/cajeros': 'Cajeros(as)',
+  '/app/ajustes/perfil': 'Perfil',
+  '/app/ajustes/usuarios': 'Usuarios',
+  '/app/ajustes/roles': 'Roles y permisos',
+  '/app/ajustes/respaldos': 'Respaldos e Importaciones',
   '/app/ajustes/informacion': 'Información',
-  '/app/ajustes/administrador': 'Administrador',
+  '/app/ajustes/conectar': 'Vincular dispositivos',
 };
 
-const ROLE_LABEL: Record<UserRole, string> = {
-  admin: 'Administrador',
-  cashier: 'Cajero(a)',
-};
+/** Cierre automático por inactividad en el panel admin. 30 minutos. */
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const IDLE_EVENTS = [
+  'mousemove',
+  'mousedown',
+  'keydown',
+  'wheel',
+  'scroll',
+  'touchstart',
+] as const;
 
 interface Notif {
   id: number;
@@ -106,33 +126,34 @@ interface Notif {
   tone?: 'info' | 'danger';
 }
 
-function useVisibleMenu(role: UserRole) {
+function useVisibleMenu(user: AuthUser | null) {
+  const { settings } = useSettings();
+  const cloud = !!settings.cloud;
   return useMemo(() => {
     const entries: MenuEntry[] = [];
     for (const entry of MENU) {
-      if (!entry.roles.includes(role)) continue;
       if (entry.kind === 'link') {
-        entries.push(entry);
+        if (can(user, entry.perm)) entries.push(entry);
       } else {
-        const children = entry.children.filter((c) => c.roles.includes(role));
+        const children = entry.children.filter((c) => can(user, c.perm) && !(cloud && c.desktopOnly));
         if (children.length) entries.push({ ...entry, children });
       }
     }
     return entries;
-  }, [role]);
+  }, [user, cloud]);
 }
 
 function NavList({
-  role,
+  user,
   onNavigate,
   collapsed,
 }: {
-  role: UserRole;
+  user: AuthUser | null;
   onNavigate: () => void;
   collapsed: boolean;
 }) {
   const location = useLocation();
-  const menu = useVisibleMenu(role);
+  const menu = useVisibleMenu(user);
 
   const activeGroupId = useMemo(() => {
     for (const entry of menu) {
@@ -276,18 +297,11 @@ function Brand({
   onToggle?: () => void;
   onClose?: () => void;
 }) {
-  const { settings, logo: logoUrl } = useSettings();
-  const logo = (
-    <img
-      src={logoUrl}
-      alt={settings.store_name}
-      className="h-9 w-9 shrink-0 rounded-xl object-cover ring-1 ring-line"
-    />
-  );
+  useSettings();
   const names = (
     <div className="min-w-0 leading-tight text-left">
-      <p className="truncate text-sm font-semibold tracking-tight">{settings.store_name}</p>
-      <p className="truncate text-[11px] text-muted">{settings.store_tagline}</p>
+      <p className="truncate text-sm font-semibold tracking-tight">SuperShop</p>
+      <p className="truncate text-[11px] text-muted">Sistema de administración de tiendas</p>
     </div>
   );
 
@@ -303,7 +317,11 @@ function Brand({
           }`}
         >
           <span className="flex min-w-0 items-center gap-2.5">
-            {logo}
+            <img
+              src="/supershop_fondo_azul.png"
+              alt="SuperShop"
+              className="h-9 w-9 shrink-0 rounded-xl object-cover ring-1 ring-line"
+            />
             {!collapsed && names}
           </span>
           {!collapsed && <IconChevronRight className="h-4 w-4 rotate-180 text-muted" />}
@@ -311,7 +329,11 @@ function Brand({
       ) : (
         <div className="flex w-full items-center justify-between px-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            {logo}
+            <img
+              src="/supershop_fondo_azul.png"
+              alt="SuperShop"
+              className="h-9 w-9 shrink-0 rounded-xl object-cover ring-1 ring-line"
+            />
             {names}
           </div>
           {onClose && (
@@ -331,11 +353,11 @@ function Brand({
 
 function UserCard({
   name,
-  role,
+  roleName,
   collapsed,
 }: {
   name?: string;
-  role: UserRole;
+  roleName?: string;
   collapsed: boolean;
 }) {
   if (collapsed) {
@@ -354,14 +376,14 @@ function UserCard({
       </div>
       <div className="min-w-0 leading-tight">
         <p className="truncate text-[13px] font-semibold text-ink">{name || 'Usuario'}</p>
-        <p className="truncate text-[11px] text-muted">{ROLE_LABEL[role]}</p>
+        <p className="truncate text-[11px] text-muted">{roleName}</p>
       </div>
     </div>
   );
 }
 
 export default function AdminLayout() {
-  const { user, role, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
   const { settings } = useSettings();
   const { theme, toggle } = useTheme();
   const location = useLocation();
@@ -374,11 +396,16 @@ export default function AdminLayout() {
     () => localStorage.getItem('sidebar-collapsed') === '1'
   );
 
-  const activeRole: UserRole = role === 'cashier' ? 'cashier' : 'admin';
+  const isAdmin = !!user?.is_admin;
 
   useEffect(() => {
     setMenuOpen(false);
   }, [location.pathname]);
+
+  // Relee rol y permisos al navegar: si el administrador cambió el rol, el menú se ajusta solo.
+  useEffect(() => {
+    void refresh();
+  }, [location.pathname, refresh]);
 
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', collapsed ? '1' : '0');
@@ -397,7 +424,7 @@ export default function AdminLayout() {
   const seenClosures = useRef<Set<number>>(new Set());
 
   const loadActivity = useCallback(() => {
-    if (activeRole !== 'admin') return;
+    if (!isAdmin) return;
     api<ActivityResponse>('/api/admin/activity')
       .then((res) => {
         const fresh = res.recentClosures
@@ -417,7 +444,7 @@ export default function AdminLayout() {
         ]);
       })
       .catch(() => undefined);
-  }, [activeRole]);
+  }, [isAdmin]);
 
   useEffect(() => {
     loadActivity();
@@ -429,6 +456,24 @@ export default function AdminLayout() {
     await logout('logout');
     navigate('/login', { replace: true });
   }, [logout, navigate]);
+
+  // Auto-cierre por inactividad (solo panel admin; el kiosko nunca cierra solo).
+  useEffect(() => {
+    let timer = window.setTimeout(() => void logout('idle'), IDLE_TIMEOUT_MS);
+    let last = Date.now();
+    const reset = () => {
+      const now = Date.now();
+      if (now - last < 5000) return;
+      last = now;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => void logout('idle'), IDLE_TIMEOUT_MS);
+    };
+    for (const ev of IDLE_EVENTS) window.addEventListener(ev, reset, { passive: true });
+    return () => {
+      window.clearTimeout(timer);
+      for (const ev of IDLE_EVENTS) window.removeEventListener(ev, reset);
+    };
+  }, [logout]);
 
   const askLogout = useCallback(() => {
     setMenuOpen(false);
@@ -445,9 +490,9 @@ export default function AdminLayout() {
         }`}
       >
         <Brand collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
-        <NavList role={activeRole} onNavigate={() => undefined} collapsed={collapsed} />
+        <NavList user={user} onNavigate={() => undefined} collapsed={collapsed} />
         <div className="space-y-2 border-t border-line p-3">
-          <UserCard name={user?.name} role={activeRole} collapsed={collapsed} />
+          <UserCard name={user?.name} roleName={user?.role_name} collapsed={collapsed} />
           <button onClick={askLogout} className="btn-soft h-10 w-full text-[13px]">
             <IconLogout className="h-4 w-4" />
             {!collapsed && 'Cerrar sesión'}
@@ -463,9 +508,9 @@ export default function AdminLayout() {
           />
           <aside className="anim-sidebar-in absolute inset-y-0 left-0 flex w-64 max-w-[85vw] flex-col border-r border-line bg-surface">
             <Brand collapsed={false} onClose={() => setMenuOpen(false)} />
-            <NavList role={activeRole} onNavigate={() => setMenuOpen(false)} collapsed={false} />
+            <NavList user={user} onNavigate={() => setMenuOpen(false)} collapsed={false} />
             <div className="space-y-2 border-t border-line p-3">
-              <UserCard name={user?.name} role={activeRole} collapsed={false} />
+              <UserCard name={user?.name} roleName={user?.role_name} collapsed={false} />
               <button
                 onClick={() => {
                   setMenuOpen(false);
@@ -551,7 +596,7 @@ export default function AdminLayout() {
                 {TITLES[location.pathname] || 'Panel de control'}
               </p>
               <p className="hidden truncate text-[11px] text-muted sm:block">
-                {user?.name} · {ROLE_LABEL[activeRole]}
+                {user?.name} · {user?.role_name}
               </p>
             </div>
           </div>

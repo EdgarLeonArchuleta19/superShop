@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { db, now } from '../db.js';
-import { requireAuth } from '../middleware.js';
+import { CLOUD, db, now } from '../db.js';
+import { requirePermission } from '../middleware.js';
 
 const router = Router();
 
@@ -9,10 +9,9 @@ const MAX_LOGO_BYTES = 600 * 1024;
 function readSettings() {
   return (
     db
-      .prepare('SELECT store_name, store_tagline, store_logo, updated_at FROM settings WHERE id = 1')
+      .prepare('SELECT store_name, store_logo, updated_at FROM settings WHERE id = 1')
       .get() || {
-      store_name: 'Super Nallely',
-      store_tagline: 'Administración de tiendas',
+      store_name: 'SuperShop',
       store_logo: null,
       updated_at: null,
     }
@@ -20,13 +19,13 @@ function readSettings() {
 }
 
 router.get('/settings', (_req, res) => {
-  res.json({ settings: readSettings() });
+  // `cloud`: versión web (Turso); el frontend oculta lo que solo existe en escritorio.
+  res.json({ settings: { ...readSettings(), cloud: CLOUD } });
 });
 
-router.put('/admin/settings', requireAuth('admin'), (req, res) => {
+router.put('/admin/settings', requirePermission('settings.info'), (req, res) => {
   const current = readSettings();
   const store_name = clean(req.body?.store_name, 60) || current.store_name;
-  const store_tagline = clean(req.body?.store_tagline, 80) || current.store_tagline;
   let logo = validateLogo(req.body?.store_logo);
   if (logo === 'invalid') {
     return res.status(400).json({ error: 'La imagen es demasiado grande o no es válida (máx. 600 KB)' });
@@ -34,10 +33,10 @@ router.put('/admin/settings', requireAuth('admin'), (req, res) => {
   if (logo === undefined) logo = current.store_logo;
 
   db.prepare(
-    'UPDATE settings SET store_name = ?, store_tagline = ?, store_logo = ?, updated_at = ? WHERE id = 1'
-  ).run(store_name, store_tagline, logo, now());
+    'UPDATE settings SET store_name = ?, store_logo = ?, updated_at = ? WHERE id = 1'
+  ).run(store_name, logo, now());
 
-  res.json({ settings: readSettings() });
+  res.json({ settings: { ...readSettings(), cloud: CLOUD } });
 });
 
 function clean(value, max) {

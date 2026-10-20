@@ -29,3 +29,15 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Credenciales OAuth de Google Drive para el build de escritorio
+electron/google-oauth.json
+
+# Builds de Electron (pueden contener credenciales empaquetadas)
+release*/
+
+# cloudflared.exe se descarga con `npm run get:cloudflared` (no se versiona: ~55 MB)
+electron/bin/
+
+# Copia vieja sin uso (la app usa electron/main.cjs)
+/main.cjs

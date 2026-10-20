@@ -32,7 +32,7 @@ export function Modal({ open, title, children, onClose, footer, wide }: ModalPro
             <IconX className="h-5 w-5" />
           </button>
         </div>
-        <div className="px-5 py-5 sm:px-6">{children}</div>
+        <div className="max-h-[70dvh] overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
         {footer && (
           <div className="flex justify-end gap-2 border-t border-hairline px-5 py-4 sm:px-6">
             {footer}
@@ -98,24 +98,22 @@ export function ConfirmDialog({
 export function ThemeToggleButton({
   onClick,
   theme,
-  variant = 'light',
   className = '',
 }: {
   onClick: () => void;
   theme: 'light' | 'dark';
-  variant?: 'light' | 'on-color';
   className?: string;
 }) {
-  const skin =
-    variant === 'on-color'
-      ? 'border-white/25 bg-white/10 text-white hover:bg-white/20'
-      : 'bg-faint text-ink/80 hover:bg-hairline';
+  const isDark = theme === 'dark';
+  const skin = isDark
+    ? 'bg-white/10 text-white border-white/20 hover:bg-white/20 dark:border-white/30'
+    : 'bg-faint text-ink/80 border-line hover:bg-hairline';
   return (
     <button
       onClick={onClick}
       aria-label={theme === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}
       title={theme === 'dark' ? 'Tema claro' : 'Tema oscuro'}
-      className={`grid h-9 w-9 place-items-center rounded-full transition ${skin} ${className}`}
+      className={`grid h-10 w-10 place-items-center rounded-full border transition ${skin} ${className}`}
     >
       {theme === 'dark' ? (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-5 w-5">

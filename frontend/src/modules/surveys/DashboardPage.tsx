@@ -4,9 +4,10 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  ComposedChart,
+  Cell,
   Legend,
-  Line,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -15,32 +16,33 @@ import {
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useTheme } from '../../lib/theme';
-import { fmtDay, fmtDateTime, fmtAvg } from '../../lib/format';
+import { fmtDay, fmtDateTime } from '../../lib/format';
 import { exportExcel, exportPdf } from '../../lib/export';
+import { useSettings } from '../../lib/settings';
 import type {
   ActivityResponse,
   Branch,
   Cashier,
   Filters,
+  GroupStats,
   LabeledCount,
+  RatingCounts,
   Register,
   StatsResponse,
   Survey,
 } from '../../lib/types';
 import FilterBar, { defaultFilters } from './components/FilterBar';
 import { Spinner } from '../../components/Modal';
-import { IconDownload, IconStar } from '../../components/Icons';
+import { IconDownload, IconRefresh } from '../../components/Icons';
+import FaceIcon from '../../components/FaceIcon';
+import {
+  RATING_META,
+  RATING_ORDER,
+  isRatingValue,
+  ratingLabel,
+} from '../../lib/rating';
 
 const BRAND = '#2b46c4';
-const AMBER = '#f59e0b';
-
-const RATING_COLORS: Record<number, string> = {
-  5: '#10b981',
-  4: '#22c55e',
-  3: '#f59e0b',
-  2: '#f97316',
-  1: '#ef4444',
-};
 
 function useChartTheme() {
   const { theme } = useTheme();
@@ -140,61 +142,79 @@ function HorizontalBars({ items, color = BRAND }: { items: LabeledCount[]; color
   );
 }
 
-function RatingBreakdown({ items }: { items: { rating: number; count: number }[] }) {
-  const total = items.reduce((s, i) => s + i.count, 0) || 1;
+function CaritasPie({ counts }: { counts: RatingCounts }) {
+  const { tooltipStyle } = useChartTheme();
+  const data = RATING_ORDER.map((v) => ({
+    name: RATING_META[v].label,
+    value: counts[v],
+    color: RATING_META[v].color,
+  })).filter((d) => d.value > 0);
+  if (!data.length) {
+    return <p className="py-8 text-center text-sm text-muted">Sin calificaciones en este rango.</p>;
+  }
+  const total = data.reduce((s, d) => s + d.value, 0) || 1;
   return (
-    <ul className="space-y-2.5">
-      {[5, 4, 3, 2, 1].map((r) => {
-        const count = items.find((i) => i.rating === r)?.count ?? 0;
-        const pct = Math.round((count / total) * 100);
-        return (
-          <li key={r} className="flex items-center gap-3 text-sm">
-            <span className="w-8 shrink-0 text-muted tabular-nums">{r}★</span>
-            <span className="h-2 flex-1 overflow-hidden rounded-full bg-hairline">
-              <span
-                className="block h-full rounded-full transition-all duration-500"
-                style={{ width: `${pct}%`, background: RATING_COLORS[r] }}
-              />
-            </span>
-            <span className="w-10 shrink-0 text-right text-[12px] text-muted tabular-nums">
-              {count}
-            </span>
-          </li>
-        );
-      })}
-    </ul>
+    <ResponsiveContainer width="100%" height={200}>
+      <PieChart>
+        <Pie
+          data={data}
+          dataKey="value"
+          nameKey="name"
+          cx="50%"
+          cy="50%"
+          innerRadius={42}
+          outerRadius={72}
+          paddingAngle={2}
+        >
+          {data.map((entry) => (
+            <Cell key={entry.name} fill={entry.color} />
+          ))}
+        </Pie>
+        <Tooltip
+          contentStyle={tooltipStyle}
+          formatter={(value, name) => [
+            `${value} (${Math.round(((value as number) / total) * 100)}%)`,
+            name,
+          ]}
+        />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+      </PieChart>
+    </ResponsiveContainer>
   );
 }
 
-function MiniRanking({
-  items,
-}: {
-  items: { id: number | null; name: string; count: number; avg: number }[];
-}) {
-  const max = Math.max(...items.map((i) => i.count), 1);
+function MiniRankingCaritas({ items }: { items: GroupStats[] }) {
   if (!items.length) return <p className="text-sm text-muted">Sin datos en este rango.</p>;
   return (
     <ul className="space-y-3">
-      {items.slice(0, 5).map((item) => (
-        <li key={`${item.id}-${item.name}`}>
-          <div className="mb-1 flex items-center justify-between text-sm">
-            <span className="truncate font-medium text-ink/85">{item.name}</span>
-            <span className="flex shrink-0 items-center gap-2 text-muted">
-              <span className="font-semibold text-ink tabular-nums">{item.count}</span>
-              <span className="inline-flex items-center gap-0.5 font-semibold text-amber-500">
-                <IconStar filled className="h-3.5 w-3.5" />
-                <span className="tabular-nums">{fmtAvg(item.avg)}</span>
-              </span>
-            </span>
-          </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-hairline">
-            <div
-              className="h-full rounded-full bg-brand-600 transition-all duration-500"
-              style={{ width: `${Math.max((item.count / max) * 100, 4)}%` }}
-            />
-          </div>
-        </li>
-      ))}
+      {items.slice(0, 5).map((item) => {
+        const total = item.count || 1;
+        return (
+          <li key={`${item.id}-${item.name}`}>
+            <div className="mb-1 flex items-center justify-between text-sm">
+              <span className="truncate font-medium text-ink/85">{item.name}</span>
+              <span className="shrink-0 font-semibold text-ink tabular-nums">{item.count}</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-hairline">
+              <div className="flex h-full">
+                {RATING_ORDER.map((v) => {
+                  const c = item[v];
+                  if (!c) return null;
+                  const w = Math.max((c / total) * 100, 2);
+                  return (
+                    <div
+                      key={v}
+                      title={`${RATING_META[v].label}: ${c}`}
+                      className="h-full"
+                      style={{ width: `${w}%`, backgroundColor: RATING_META[v].color }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -220,7 +240,7 @@ function RankingPanel({
   const current = dims.find((d) => d.key === active) ?? dims[0];
 
   return (
-    <Panel title="Rendimiento" subtitle="Encuestas y promedio por:">
+    <Panel title="Rendimiento" subtitle="Encuestas y caritas por:">
       <div className="mb-3 flex rounded-full bg-hairline p-0.5">
         {dims.map((d) => (
           <button
@@ -237,15 +257,18 @@ function RankingPanel({
           </button>
         ))}
       </div>
-      <MiniRanking items={current.items} />
+      <MiniRankingCaritas items={current.items} />
     </Panel>
   );
 }
 
 export default function DashboardPage() {
   const { axisColor, gridColor, tooltipStyle } = useChartTheme();
-  const { role } = useAuth();
-  const isAdmin = role === 'admin';
+  const { can } = useAuth();
+  const canExport = can('surveys.export');
+  const { settings } = useSettings();
+  const storeInfo = { name: settings.store_name, logo: settings.store_logo };
+
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [registers, setRegisters] = useState<Register[]>([]);
@@ -256,13 +279,9 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const branchesReq = api<{ items: Branch[] }>('/api/branches?active=0');
-    const registersReq = isAdmin
-      ? api<{ items: Register[] }>('/api/admin/registers')
-      : Promise.resolve({ items: [] as Register[] });
-    const cashiersReq = isAdmin
-      ? api<{ items: Cashier[] }>('/api/admin/cashiers')
-      : Promise.resolve({ items: [] as Cashier[] });
+    const branchesReq = api<{ items: Branch[] }>('/api/admin/branches');
+    const registersReq = api<{ items: Register[] }>('/api/admin/registers');
+    const cashiersReq = api<{ items: Cashier[] }>('/api/admin/cashiers');
     Promise.all([branchesReq, registersReq, cashiersReq])
       .then(([b, r, c]) => {
         setBranches(b.items);
@@ -270,7 +289,7 @@ export default function DashboardPage() {
         setCashiers(c.items);
       })
       .catch(() => setError('No se pudieron cargar los filtros'));
-  }, [isAdmin]);
+  }, []);
 
   const qs = useMemo(() => {
     const p = new URLSearchParams();
@@ -301,19 +320,27 @@ export default function DashboardPage() {
     };
   }, [qs]);
 
+  useEffect(() => {
+    const id = setInterval(() => {
+      api<StatsResponse>(`/api/admin/stats?${qs}`, { role: 'admin' }).then((res) => {
+        setStats(res);
+        setError('');
+      }).catch(() => undefined);
+    }, 10000);
+    return () => clearInterval(id);
+  }, [qs]);
+
   const loadActivity = useCallback(() => {
-    if (!isAdmin) return;
     api<ActivityResponse>('/api/admin/activity')
       .then(setActivity)
       .catch(() => undefined);
-  }, [isAdmin]);
+  }, []);
 
   useEffect(() => {
     loadActivity();
-    if (!isAdmin) return;
     const timer = window.setInterval(loadActivity, 30000);
     return () => window.clearInterval(timer);
-  }, [loadActivity, isAdmin]);
+  }, [loadActivity]);
 
   const describeFilters = useCallback(() => {
     const parts: string[] = [];
@@ -351,12 +378,13 @@ export default function DashboardPage() {
       await exportPdf(rows, {
         title: 'Reporte general de encuestas',
         subtitle: describeFilters(),
+        store: storeInfo,
         summary: stats
           ? [
               { label: 'Encuestas', value: String(stats.total) },
-              { label: 'Calificación promedio', value: `${fmtAvg(stats.avgRating)} / 5` },
-              { label: 'Área a mejorar #1', value: stats.areas[0]?.label || '—' },
-              { label: 'Todo bien', value: `${stats.allGoodPct}%` },
+              { label: 'Buenas', value: String(stats.ratingCounts.good) },
+              { label: 'Regulares', value: String(stats.ratingCounts.regular) },
+              { label: 'Malas', value: String(stats.ratingCounts.bad) },
             ]
           : [],
       });
@@ -364,6 +392,10 @@ export default function DashboardPage() {
       setError(e instanceof Error ? e.message : 'No se pudo exportar');
     }
   };
+
+  const goodPct = stats?.total
+    ? Math.round((stats.ratingCounts.good / stats.total) * 100)
+    : 0;
 
   return (
     <div className="space-y-4">
@@ -383,7 +415,26 @@ export default function DashboardPage() {
         registers={registers}
         cashiers={cashiers}
       >
-        {isAdmin && (
+        <button
+          onClick={() => {
+            setLoading(true);
+            api<StatsResponse>(`/api/admin/stats?${qs}`, { role: 'admin' })
+              .then((res) => {
+                setStats(res);
+                setError('');
+              })
+              .catch((e) => {
+                setError(e instanceof Error ? e.message : 'Error al cargar reportes');
+              })
+              .finally(() => setLoading(false));
+          }}
+          className="btn h-[38px] px-4 text-sm"
+          disabled={loading}
+        >
+          <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline">Actualizar</span>
+        </button>
+        {canExport && (
           <>
             <button
               onClick={onExcel}
@@ -425,10 +476,8 @@ export default function DashboardPage() {
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Kpi label="Encuestas" value={String(stats.total)} hint={describeFilters()} />
-            <Kpi label="Calificación promedio" value={fmtAvg(stats.avgRating)} hint="de 5 estrellas">
-              <span className="mb-0.5 flex items-center text-amber-500">
-                <IconStar filled className="h-5 w-5" />
-              </span>
+            <Kpi label="Buena atención" value={String(stats.ratingCounts.good)} hint={`${goodPct}% del total`}>
+              <FaceIcon value="good" className="h-6 w-6" />
             </Kpi>
             <Kpi label="Sin quejas" value={`${stats.allGoodPct}%`} hint="marcaron “todo bien”" />
             <Kpi
@@ -452,22 +501,15 @@ export default function DashboardPage() {
               <HorizontalBars items={stats.likes} color="#10b981" />
             </Panel>
           </div>
+
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <Panel title="Calificaciones" subtitle="Distribución por estrellas">
-              <div className="mb-4 flex items-baseline gap-2">
-                <span className="text-[34px] font-semibold leading-none tracking-tight tabular-nums">
-                  {fmtAvg(stats.avgRating)}
-                </span>
-                <span className="flex items-center gap-1 text-sm text-muted">
-                  <IconStar filled className="h-4 w-4 text-amber-500" /> / 5
-                </span>
-              </div>
-              <RatingBreakdown items={stats.ratingDist} />
+            <Panel title="Calificaciones" subtitle="Distribución de caritas">
+              <CaritasPie counts={stats.ratingCounts} />
             </Panel>
 
-            <Panel title="Tendencia diaria" subtitle="Encuestas y promedio" className="lg:col-span-2">
+            <Panel title="Tendencia diaria" subtitle="Encuestas por carita" className="lg:col-span-2">
               <ResponsiveContainer width="100%" height={190}>
-                <ComposedChart data={stats.trend} margin={{ top: 0, right: 4, left: -22, bottom: 0 }}>
+                <BarChart data={stats.trend} margin={{ top: 0, right: 4, left: -22, bottom: 0 }}>
                   <CartesianGrid stroke={gridColor} strokeDasharray="3 3" vertical={false} />
                   <XAxis
                     dataKey="date"
@@ -478,17 +520,7 @@ export default function DashboardPage() {
                     minTickGap={28}
                   />
                   <YAxis
-                    yAxisId="left"
                     allowDecimals={false}
-                    tick={{ fill: axisColor, fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    domain={[0, 5]}
-                    ticks={[1, 3, 5]}
                     tick={{ fill: axisColor, fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
@@ -496,27 +528,27 @@ export default function DashboardPage() {
                   <Tooltip
                     contentStyle={tooltipStyle}
                     labelFormatter={(v) => fmtDateTime(`${String(v)}T12:00:00`)}
-                    formatter={(value, name) =>
-                      name === 'count'
-                        ? [`${value} encuestas`, 'Encuestas']
-                        : [`${value} ★`, 'Promedio']
-                    }
+                    formatter={(value, name) => [
+                      `${value} encuestas`,
+                      isRatingValue(name) ? ratingLabel(name) : String(name),
+                    ]}
                   />
                   <Legend
-                    formatter={(value) => (value === 'count' ? 'Encuestas' : 'Calificación prom.')}
+                    formatter={(value) => (isRatingValue(value) ? ratingLabel(value) : String(value))}
                     wrapperStyle={{ fontSize: 12 }}
                   />
-                  <Bar yAxisId="left" dataKey="count" name="count" fill={BRAND} radius={[6, 6, 0, 0]} maxBarSize={18} />
-                  <Line
-                    yAxisId="right"
-                    dataKey="avg"
-                    name="avg"
-                    stroke={AMBER}
-                    strokeWidth={2.5}
-                    dot={false}
-                    type="monotone"
-                  />
-                </ComposedChart>
+                  {RATING_ORDER.map((v) => (
+                    <Bar
+                      key={v}
+                      dataKey={v}
+                      name={v}
+                      stackId="caritas"
+                      fill={RATING_META[v].color}
+                      radius={v === 'good' ? [6, 6, 0, 0] : undefined}
+                      maxBarSize={18}
+                    />
+                  ))}
+                </BarChart>
               </ResponsiveContainer>
             </Panel>
           </div>
@@ -538,10 +570,14 @@ export default function DashboardPage() {
                       </p>
                       <p className="truncate text-[12px] text-muted">{fmtDateTime(s.created_at)}</p>
                     </div>
-                    <span className="flex shrink-0 items-center gap-1 text-[13px] font-semibold text-amber-500">
-                      <IconStar filled className="h-3.5 w-3.5" />
-                      <span className="tabular-nums">{s.rating}</span>
-                    </span>
+                    {isRatingValue(s.rating) ? (
+                      <span className="flex shrink-0 items-center gap-1.5 text-[13px] font-semibold">
+                        <FaceIcon value={s.rating} className="h-5 w-5" />
+                        <span>{ratingLabel(s.rating)}</span>
+                      </span>
+                    ) : (
+                      <span className="shrink-0 text-[12px] text-muted">Sin calificación</span>
+                    )}
                   </li>
                 ))}
               </ul>

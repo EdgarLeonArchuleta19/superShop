@@ -4,7 +4,7 @@ export default function BranchesPage() {
   return (
     <CrudPage
       title="Sucursales"
-      subtitle="Tiendas de Super Nallely. Puedes crear más aunque solo exista una por ahora."
+      subtitle="Todas las tiendas registradas. Puedes crear más aunque solo exista una por ahora."
       endpoint="/api/admin/branches"
       newLabel="Nueva sucursal"
       nameLabel={(row) => row.name}
@@ -13,7 +13,7 @@ export default function BranchesPage() {
           key: 'name',
           label: 'Nombre de la sucursal',
           type: 'text',
-          placeholder: 'Ej. Super Nallely Centro',
+          placeholder: 'Ej. Mi Tienda Centro',
         },
       ]}
       columns={[

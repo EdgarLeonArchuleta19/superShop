@@ -1,4 +1,6 @@
 import type { Survey } from './types';
+import { isRatingValue, ratingLabel } from './rating';
+import { storeInitials } from './format';
 
 function fmtDate(iso: string): string {
   const d = new Date(iso);
@@ -26,13 +28,19 @@ function toRows(surveys: Survey[]) {
     'Áreas a mejorar': s.areas.join(', '),
     'No gustó': s.dislikes.join(', '),
     'Por qué les gusta': s.likes.join(', '),
-    Calificación: s.rating,
+    Calificación: isRatingValue(s.rating) ? ratingLabel(s.rating) : 'Sin calificación',
   }));
+}
+
+interface StoreInfo {
+  name: string;
+  tagline?: string;
+  logo?: string | null;
 }
 
 export async function exportExcel(
   surveys: Survey[],
-  filename = `encuestas-super-nallely-${stamp()}`
+  filename = `encuestas-${stamp()}`
 ): Promise<void> {
   const XLSX = await import('xlsx');
   const ws = XLSX.utils.json_to_sheet(toRows(surveys));
@@ -56,39 +64,68 @@ export interface PdfOptions {
   subtitle?: string;
   summary?: { label: string; value: string }[];
   filename?: string;
+  store?: StoreInfo;
 }
 
-let logoPromise: Promise<string | null> | null = null;
+const LOGO_SIZE = 180;
+// Por imagen (no global): si se cambia el logo, el siguiente reporte ya usa el nuevo.
+const logoCache = new Map<string, Promise<string | null>>();
 
-function loadLogo(): Promise<string | null> {
-  if (logoPromise) return logoPromise;
-  logoPromise = new Promise((resolve) => {
-    if (typeof document === 'undefined') return resolve(null);
+function squareCanvas(): [HTMLCanvasElement, CanvasRenderingContext2D] | null {
+  const canvas = document.createElement('canvas');
+  canvas.width = LOGO_SIZE;
+  canvas.height = LOGO_SIZE;
+  const ctx = canvas.getContext('2d');
+  return ctx ? [canvas, ctx] : null;
+}
+
+/** Sin logo: las iniciales de la tienda sobre el azul de la marca (como en <StoreLogo>). */
+function initialsLogo(name: string): string | null {
+  const c = squareCanvas();
+  if (!c) return null;
+  const [canvas, ctx] = c;
+  const gradient = ctx.createLinearGradient(0, 0, LOGO_SIZE, LOGO_SIZE);
+  gradient.addColorStop(0, '#3b5bdb');
+  gradient.addColorStop(1, '#2b46c4');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, LOGO_SIZE, LOGO_SIZE);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 76px Helvetica, Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(storeInitials(name), LOGO_SIZE / 2, LOGO_SIZE / 2 + 4);
+  return canvas.toDataURL('image/jpeg', 0.92);
+}
+
+function loadLogo(store: StoreInfo): Promise<string | null> {
+  if (typeof document === 'undefined') return Promise.resolve(null);
+  if (!store.logo) return Promise.resolve(initialsLogo(store.name));
+  const cached = logoCache.get(store.logo);
+  if (cached) return cached;
+  const promise = new Promise<string | null>((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
-        const size = 180;
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return resolve(null);
-        const scale = Math.max(size / img.width, size / img.height);
+        const c = squareCanvas();
+        if (!c) return resolve(null);
+        const [canvas, ctx] = c;
+        const scale = Math.max(LOGO_SIZE / img.width, LOGO_SIZE / img.height);
         const w = img.width * scale;
         const h = img.height * scale;
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, size, size);
-        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        ctx.fillRect(0, 0, LOGO_SIZE, LOGO_SIZE);
+        ctx.drawImage(img, (LOGO_SIZE - w) / 2, (LOGO_SIZE - h) / 2, w, h);
         resolve(canvas.toDataURL('image/jpeg', 0.92));
       } catch {
-        resolve(null);
+        resolve(initialsLogo(store.name));
       }
     };
-    img.onerror = () => resolve(null);
-    img.src = '/logo-tienda.jpg';
+    img.onerror = () => resolve(initialsLogo(store.name));
+    img.src = store.logo!;
   });
-  return logoPromise;
+  logoCache.set(store.logo, promise);
+  return promise;
 }
 
 export async function exportPdf(surveys: Survey[], opts: PdfOptions = {}): Promise<void> {
@@ -98,8 +135,11 @@ export async function exportPdf(surveys: Survey[], opts: PdfOptions = {}): Promi
   ]);
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
 
-  const logo = await loadLogo();
+  const store = opts.store || { name: 'SuperShop', logo: null };
+
+  const logo = await loadLogo(store);
   let textX = 40;
   if (logo) {
     try {
@@ -113,7 +153,7 @@ export async function exportPdf(surveys: Survey[], opts: PdfOptions = {}): Promi
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(43, 70, 196);
-  doc.text('Super Nallely – Encuestas de satisfacción', textX, 38);
+  doc.text(`${store.name} – Encuestas de satisfacción`, textX, 38);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
@@ -150,13 +190,13 @@ export async function exportPdf(surveys: Survey[], opts: PdfOptions = {}): Promi
     s.areas.join(', '),
     s.dislikes.join(', '),
     s.likes.join(', '),
-    String(s.rating),
+    isRatingValue(s.rating) ? ratingLabel(s.rating) : 'Sin calificación',
   ]);
 
   autoTable(doc, {
     startY,
     head: [
-      ['Fecha', 'Sucursal', 'Caja', 'Cajera', 'Áreas a mejorar', 'No gustó', 'Por qué les gusta', '★'],
+      ['Fecha', 'Sucursal', 'Caja', 'Cajera', 'Áreas a mejorar', 'No gustó', 'Por qué les gusta', 'Calificación'],
     ],
     body,
     styles: { fontSize: 7.5, cellPadding: 4, overflow: 'linebreak' },
@@ -167,10 +207,25 @@ export async function exportPdf(surveys: Survey[], opts: PdfOptions = {}): Promi
       1: { cellWidth: 95 },
       2: { cellWidth: 60 },
       3: { cellWidth: 85 },
-      7: { cellWidth: 30, halign: 'center' },
+      7: { cellWidth: 50, halign: 'center' },
     },
     margin: { left: 40, right: 40 },
+    didDrawPage: (_data) => {
+      const pageCount = doc.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          `Generado por SuperShop · ELAN Software  |  Página ${i} de ${pageCount}`,
+          pageWidth / 2,
+          pageHeight - 20,
+          { align: 'center' }
+        );
+      }
+    },
   });
 
-  doc.save(`${opts.filename || `encuestas-super-nallely-${stamp()}`}.pdf`);
+  doc.save(`${opts.filename || `encuestas-${stamp()}`}.pdf`);
 }
