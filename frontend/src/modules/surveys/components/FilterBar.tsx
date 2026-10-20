@@ -105,3 +105,18 @@ export function defaultFilters(): Filters {
   const fmt = (x: Date) => `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
   return { branch_id: '', register_id: '', cashier_id: '', from: fmt(from), to: fmt(d) };
 }
+
+/**
+ * Arma la consulta para /api/admin/surveys y /api/admin/stats. Las fechas del filtro son
+ * días locales (YYYY-MM-DD) y en la base se guardan en ISO UTC: se mandan como inicio y
+ * fin del día en la zona del navegador para no perder las encuestas de "hoy".
+ */
+export function filtersQuery(filters: Filters): string {
+  const p = new URLSearchParams();
+  (Object.keys(filters) as (keyof Filters)[]).forEach((k) => {
+    if (filters[k]) p.set(k, filters[k]);
+  });
+  if (filters.from) p.set('from', new Date(`${filters.from}T00:00:00`).toISOString());
+  if (filters.to) p.set('to', new Date(`${filters.to}T23:59:59.999`).toISOString());
+  return p.toString();
+}

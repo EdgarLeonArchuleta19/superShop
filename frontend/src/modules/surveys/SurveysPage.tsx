@@ -4,7 +4,7 @@ import { fmtDateTime } from '../../lib/format';
 import { exportExcel, exportPdf } from '../../lib/export';
 import { useSettings } from '../../lib/settings';
 import type { Branch, Cashier, Filters, Register, Survey } from '../../lib/types';
-import FilterBar, { defaultFilters } from './components/FilterBar';
+import FilterBar, { defaultFilters, filtersQuery } from './components/FilterBar';
 import Pagination from '../../components/Pagination';
 import { Spinner } from '../../components/Modal';
 import { IconDownload, IconRefresh } from '../../components/Icons';
@@ -39,11 +39,7 @@ export default function SurveysPage() {
       .catch(() => undefined);
   }, []);
 
-  const qs = new URLSearchParams();
-  (Object.keys(filters) as (keyof Filters)[]).forEach((k) => {
-    if (filters[k]) qs.set(k, filters[k]);
-  });
-  const queryString = qs.toString();
+  const queryString = filtersQuery(filters);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -141,7 +137,7 @@ export default function SurveysPage() {
       >
         <button
           onClick={() => load()}
-          className="btn h-[38px] px-4 text-sm"
+          className="btn h-[38px] bg-brand-600 px-4 text-sm text-white hover:bg-brand-700"
           disabled={loading}
         >
           <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />

@@ -25,6 +25,7 @@ const UsersPage = lazy(() => import('../modules/settings/UsersPage'));
 const BackupsPage = lazy(() => import('../modules/settings/BackupsPage'));
 const ConnectPage = lazy(() => import('../modules/settings/ConnectPage'));
 const RolesPage = lazy(() => import('../modules/settings/RolesPage'));
+const AccessLogPage = lazy(() => import('../modules/settings/AccessLogPage'));
 const InstallPage = lazy(() => import('../modules/install/InstallPage'));
 
 function RouteFallback() {
@@ -167,6 +168,14 @@ function AnimatedRoutes() {
           element={
             <PermGate perm="admin">
               <RolesPage />
+            </PermGate>
+          }
+        />
+        <Route
+          path="ajustes/accesos"
+          element={
+            <PermGate perm="admin">
+              <AccessLogPage />
             </PermGate>
           }
         />

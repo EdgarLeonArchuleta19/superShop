@@ -107,6 +107,10 @@
 | `LOCAL_HTTPS` | `true` | `false` desactiva el HTTPS de la red local (p. ej. en un servidor web detrás de un proxy) |
 | `CLOUDFLARED_PATH` | `<app>/…/electron/bin/cloudflared.exe` | Binario del túnel para la conexión por internet |
 | `TRUST_PROXY` | `false` | `true` detrás de un proxy HTTPS (necesario para que el callback sea `https://`) |
+| `SESSION_TTL_HOURS` | `2160` (90 días) | Horas que dura una sesión sin usarse; cada día de uso la renueva |
+| `CF_ORIGIN_SECRET` | — | Versión web: solo acepta tráfico que traiga esta clave en `X-SuperShop-Origin` (la agrega Cloudflare). Ver `docs/DESPLIEGUE-WEB.md` |
+| `ACCESS_GATE_DISABLED` | — | `true` apaga el acceso con enlace privado (emergencia, si se perdió el enlace) |
+| `ALLOWED_COUNTRIES` | — | Países permitidos según Cloudflare, p. ej. `MX` o `MX,US`. Solo se aplica junto con `CF_ORIGIN_SECRET` |
 
 ---
 

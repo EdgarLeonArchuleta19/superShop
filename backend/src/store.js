@@ -37,11 +37,11 @@ export function loadSurveys(q = {}, opts = {}) {
 
   if (q.from) {
     conditions.push('created_at >= @from');
-    params.from = q.from;
+    params.from = dayBound(q.from, 'T00:00:00');
   }
   if (q.to) {
     conditions.push('created_at <= @to');
-    params.to = q.to;
+    params.to = dayBound(q.to, 'T23:59:59.999');
   }
   if (q.branch_id) {
     conditions.push('branch_id = @branch_id');
@@ -67,6 +67,18 @@ export function loadSurveys(q = {}, opts = {}) {
     )
     .all({ ...params, limit });
   return rows.map(mapSurvey);
+}
+
+/**
+ * created_at se guarda en ISO UTC ("2026-10-19T15:04:05.000Z"). Si el filtro llega como
+ * día suelto ("2026-10-19"), compararlo tal cual deja fuera todo ese día en el límite
+ * "hasta": se convierte al inicio o fin del día en la hora local del servidor.
+ */
+function dayBound(value, time) {
+  const s = String(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(`${s}${time}`);
+  return Number.isNaN(d.getTime()) ? s : d.toISOString();
 }
 
 export function localDate(iso) {

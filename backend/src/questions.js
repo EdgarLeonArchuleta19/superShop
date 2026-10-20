@@ -42,7 +42,7 @@ export const questions = {
   ],
   rating: {
     id: 'rating',
-    title: '¿Cómo te atendí?',
+    title: '¿Cómo fue la atención en general?',
     help: 'Toca la carita que mejor te represente',
     options: [
       { value: 'good', label: 'Buena' },

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { useToast } from '../../lib/toast';
 import { api } from '../../lib/api';
+import { useAuth } from '../../lib/auth';
 import { ConfirmDialog, Spinner } from '../../components/Modal';
 import {
   IconAlert,
@@ -42,6 +43,16 @@ interface ConnectInfo {
   lan: LanAddress[];
   https: { enabled: boolean; port: number | null; certificateUrl: string };
   weakPasswordUsers: string[];
+  /** Acceso solo con enlace privado. `key` solo viene cuando está activo. */
+  access: { enabled: boolean; key: string | null; forcedOff: boolean };
+}
+
+/** Clave del enlace privado: si está activo, las direcciones y los QR la incluyen. */
+const AccessKeyContext = createContext<string | null>(null);
+
+/** Dirección con la clave de acceso, p. ej. https://app.com/instalar?acceso=… */
+function withAccess(url: string, path: string, key: string | null): string {
+  return key ? `${url}${path}?acceso=${encodeURIComponent(key)}` : `${url}${path}`;
 }
 
 interface DesktopApi {
@@ -175,19 +186,21 @@ function Collapsible({
 }
 
 /** El QR abre /instalar: ahí se guía a la persona para agregar la app a su pantalla de inicio. */
-function AddressBox({ url, onCopy, qrSize = 148 }: { url: string; onCopy: () => void; qrSize?: number }) {
-  const qrValue = `${url}/instalar`;
+function AddressBox({ url, onCopy, qrSize = 148 }: { url: string; onCopy: (link: string) => void; qrSize?: number }) {
+  const accessKey = useContext(AccessKeyContext);
+  const qrValue = withAccess(url, '/instalar', accessKey);
+  const link = accessKey ? withAccess(url, '/', accessKey) : url;
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
       <div className="min-w-0 flex-1 space-y-2">
-        <p className="eyebrow">Dirección</p>
-        <p className="break-all rounded-xl bg-faint px-3.5 py-3 font-mono text-[15px] font-semibold text-ink">{url}</p>
+        <p className="eyebrow">{accessKey ? 'Enlace privado' : 'Dirección'}</p>
+        <p className="break-all rounded-xl bg-faint px-3.5 py-3 font-mono text-[15px] font-semibold text-ink">{link}</p>
         <div className="flex flex-wrap gap-2">
-          <button onClick={onCopy} className="btn-soft h-9 px-3.5 text-[13px]">
+          <button onClick={() => onCopy(link)} className="btn-soft h-9 px-3.5 text-[13px]">
             <IconCopy className="h-4 w-4" />
             Copiar
           </button>
-          <a href={url} target="_blank" rel="noopener noreferrer" className="btn-ghost h-9 px-3.5 text-[13px]">
+          <a href={link} target="_blank" rel="noopener noreferrer" className="btn-ghost h-9 px-3.5 text-[13px]">
             <IconExternalLink className="h-4 w-4" />
             Probar
           </a>
@@ -403,6 +416,7 @@ function LanSection({ info, copy }: { info: ConnectInfo; copy: (url: string) => 
   const [lanIndex, setLanIndex] = useState(0);
   const [device, setDevice] = useState<Device>('windows');
   const [certOpen, setCertOpen] = useState(false);
+  const accessKey = useContext(AccessKeyContext);
   const { lan } = info;
 
   if (lan.length === 0) {
@@ -419,11 +433,11 @@ function LanSection({ info, copy }: { info: ConnectInfo; copy: (url: string) => 
 
   const lanAddress = lan[Math.min(lanIndex, lan.length - 1)];
   const lanUrl = lanAddress.httpsUrl ?? lanAddress.url;
-  const certificateLink = `${lanAddress.url}${info.https.certificateUrl}`;
+  const certificateLink = withAccess(lanAddress.url, info.https.certificateUrl, accessKey);
 
   return (
     <div className="space-y-5">
-      <AddressBox url={lanUrl} onCopy={() => copy(lanUrl)} />
+      <AddressBox url={lanUrl} onCopy={(link) => copy(link)} />
       {lan.length > 1 && (
         <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted">
           <span>¿No abre? Prueba otra dirección de esta computadora:</span>
@@ -506,7 +520,8 @@ function LanSection({ info, copy }: { info: ConnectInfo; copy: (url: string) => 
               </div>
               <Steps items={CERT_STEPS[device]} />
               <p className="text-[12px] text-muted">
-                ¿Prefieres no instalar nada? Usa <span className="font-mono">{lanAddress.url}</span>: funciona igual, pero
+                ¿Prefieres no instalar nada? Usa{' '}
+                <span className="break-all font-mono">{withAccess(lanAddress.url, '/', accessKey)}</span>: funciona igual, pero
                 sin la opción de seguir trabajando cuando se cae la red.
               </p>
             </div>
@@ -554,6 +569,7 @@ function LanSection({ info, copy }: { info: ConnectInfo; copy: (url: string) => 
 
 export default function ConnectPage() {
   const toast = useToast();
+  const isAdmin = !!useAuth().user?.is_admin;
   const [info, setInfo] = useState<ConnectInfo | null>(null);
   const [loadError, setLoadError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -673,6 +689,7 @@ export default function ConnectPage() {
   );
 
   return (
+    <AccessKeyContext.Provider value={info.access.key}>
     <div className="max-w-3xl space-y-5">
       <div>
         <h1 className="text-[20px] font-semibold tracking-tight sm:text-[22px]">Vincular dispositivos</h1>
@@ -683,6 +700,24 @@ export default function ConnectPage() {
 
       {weakPasswords}
 
+      {isAdmin && (
+        <AccessGateCard
+          access={info.access}
+          busy={busy}
+          onCopy={(link) => void copy(link)}
+          onSave={(enabled) =>
+            void call('/api/admin/access-gate', { enabled }, 'PUT').then(
+              (ok) => ok && toast.update(enabled ? 'Enlace privado activo' : 'Enlace privado desactivado')
+            )
+          }
+          onRegenerate={() =>
+            void call('/api/admin/access-gate/regenerate').then(
+              (ok) => ok && toast.update('Enlace nuevo generado', 'Comparte el nuevo enlace con tu personal.')
+            )
+          }
+        />
+      )}
+
       {publicOrigin ? (
         <Card
           icon={<IconCloudCheck className="h-5 w-5" />}
@@ -690,7 +725,7 @@ export default function ConnectPage() {
           subtitle="Cualquier dispositivo con internet puede entrar con esta dirección."
         >
           <div className="space-y-5">
-            <AddressBox url={publicOrigin} onCopy={() => void copy(publicOrigin)} />
+            <AddressBox url={publicOrigin} onCopy={(link) => void copy(link)} />
             <Steps
               items={[
                 'Escanea el código con la cámara del celular, o abre la dirección en el navegador.',
@@ -710,7 +745,7 @@ export default function ConnectPage() {
           >
             <div className="space-y-5">
               <FixedStatus tunnel={info.tunnel} port={info.port} busy={busy} onRetry={() => void call('/api/admin/tunnel/start')} />
-              <AddressBox url={fixedUrl} onCopy={() => void copy(fixedUrl)} qrSize={176} />
+              <AddressBox url={fixedUrl} onCopy={(link) => void copy(link)} qrSize={176} />
               <div className="space-y-3 border-t border-line pt-4">
                 <p className="text-[13px] font-semibold text-ink">Cómo conectar un celular o computadora (una sola vez)</p>
                 <Steps
@@ -808,6 +843,126 @@ export default function ConnectPage() {
         onClose={() => setConfirmRemove(false)}
       />
     </div>
+    </AccessKeyContext.Provider>
+  );
+}
+
+/** Acceso solo con enlace privado: solo el Administrador lo activa o cambia. */
+function AccessGateCard({
+  access,
+  busy,
+  onSave,
+  onRegenerate,
+  onCopy,
+}: {
+  access: ConnectInfo['access'];
+  busy: boolean;
+  onSave: (enabled: boolean) => void;
+  onRegenerate: () => void;
+  onCopy: (link: string) => void;
+}) {
+  const [confirmEnable, setConfirmEnable] = useState(false);
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
+  const origin = window.location.origin;
+  const showLink = access.key && isPublicHost(window.location.hostname);
+  const link = access.key ? withAccess(origin, '/', access.key) : '';
+
+  return (
+    <Card
+      icon={<IconLock className="h-5 w-5" />}
+      title="Acceso solo con enlace privado"
+      subtitle="Quien no tenga el enlace solo ve una página de presentación de SuperShop; no puede llegar al inicio de sesión."
+      badge={
+        access.enabled && (
+          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+            Activo
+          </span>
+        )
+      }
+    >
+      <div className="space-y-4">
+        {access.forcedOff && (
+          <div className="flex items-start gap-2.5 rounded-xl bg-amber-50 px-3.5 py-3 text-[13px] text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+            <IconAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>
+              Está apagado por la variable <Mono>ACCESS_GATE_DISABLED</Mono> del servidor. Quítala para que vuelva a
+              funcionar.
+            </p>
+          </div>
+        )}
+
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[14px] font-semibold text-ink">Pedir el enlace privado para entrar</p>
+            <p className="text-[12px] text-muted">
+              Cada dispositivo abre el enlace (o escanea el QR de esta pantalla) una sola vez y queda autorizado por un
+              año. Esta computadora siempre puede entrar.
+            </p>
+          </div>
+          <Switch
+            label="Pedir el enlace privado"
+            checked={access.enabled}
+            onChange={(v) => (v ? setConfirmEnable(true) : onSave(false))}
+          />
+        </div>
+
+        {access.enabled && (
+          <>
+            {showLink && (
+              <div className="space-y-2">
+                <p className="eyebrow">Enlace privado</p>
+                <p className="break-all rounded-xl bg-faint px-3.5 py-3 font-mono text-[13px] font-semibold text-ink">{link}</p>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => onCopy(link)} className="btn-soft h-9 px-3.5 text-[13px]">
+                    <IconCopy className="h-4 w-4" />
+                    Copiar
+                  </button>
+                </div>
+              </div>
+            )}
+            <p className="text-[12px] text-muted">
+              Las direcciones y códigos QR de esta pantalla ya incluyen el enlace privado. Guárdalo en un lugar seguro y
+              compártelo solo con tu personal: quien lo tenga puede llegar al inicio de sesión.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setConfirmRegenerate(true)}
+                disabled={busy}
+                className="btn-ghost h-9 px-3.5 text-[13px] text-red-600"
+              >
+                <IconRefresh className="h-4 w-4" />
+                Generar enlace nuevo
+              </button>
+            </div>
+          </>
+        )}
+
+      </div>
+
+      <ConfirmDialog
+        open={confirmEnable}
+        title="Pedir enlace privado"
+        confirmLabel="Activar"
+        message="Los celulares, tablets y computadoras que ya usan SuperShop dejarán de entrar hasta que abran el enlace privado o escaneen otra vez el QR de esta pantalla. Este dispositivo queda autorizado."
+        onConfirm={() => {
+          setConfirmEnable(false);
+          onSave(true);
+        }}
+        onClose={() => setConfirmEnable(false)}
+      />
+      <ConfirmDialog
+        open={confirmRegenerate}
+        title="Generar enlace nuevo"
+        danger
+        confirmLabel="Generar"
+        message="El enlace actual deja de funcionar y todos los dispositivos, menos este, tendrán que abrir el enlace nuevo. Úsalo si el enlace llegó a quien no debía."
+        onConfirm={() => {
+          setConfirmRegenerate(false);
+          onRegenerate();
+        }}
+        onClose={() => setConfirmRegenerate(false)}
+      />
+    </Card>
   );
 }
 
@@ -862,7 +1017,7 @@ function QuickTunnelSection({
                 Apagar
               </button>
             </div>
-            <AddressBox url={tunnel.url} onCopy={() => copy(tunnel.url!)} />
+            <AddressBox url={tunnel.url} onCopy={(link) => copy(link)} />
           </div>
         )
       )}

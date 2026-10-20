@@ -79,7 +79,9 @@ function squareCanvas(): [HTMLCanvasElement, CanvasRenderingContext2D] | null {
   return ctx ? [canvas, ctx] : null;
 }
 
-/** Sin logo: las iniciales de la tienda sobre el azul de la marca (como en <StoreLogo>). */
+const APP_LOGO = '/icon-192.png';
+
+/** Si el logo no carga: las iniciales de la tienda sobre el azul de la marca. */
 function initialsLogo(name: string): string | null {
   const c = squareCanvas();
   if (!c) return null;
@@ -99,8 +101,9 @@ function initialsLogo(name: string): string | null {
 
 function loadLogo(store: StoreInfo): Promise<string | null> {
   if (typeof document === 'undefined') return Promise.resolve(null);
-  if (!store.logo) return Promise.resolve(initialsLogo(store.name));
-  const cached = logoCache.get(store.logo);
+  // Sin logo propio se usa el de SuperShop (como en <StoreLogo>).
+  const src = store.logo || APP_LOGO;
+  const cached = logoCache.get(src);
   if (cached) return cached;
   const promise = new Promise<string | null>((resolve) => {
     const img = new Image();
@@ -122,9 +125,9 @@ function loadLogo(store: StoreInfo): Promise<string | null> {
       }
     };
     img.onerror = () => resolve(initialsLogo(store.name));
-    img.src = store.logo!;
+    img.src = src;
   });
-  logoCache.set(store.logo, promise);
+  logoCache.set(src, promise);
   return promise;
 }
 

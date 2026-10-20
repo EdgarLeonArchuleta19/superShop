@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../../lib/auth';
+import { MIN_PASSWORD_LENGTH, PASSWORD_HINT, passwordProblem } from '../../lib/passwords';
+import PasswordStrength from '../../components/PasswordStrength';
 import { useToast } from '../../lib/toast';
 import { api } from '../../lib/api';
 import { Spinner } from '../../components/Modal';
@@ -59,8 +61,9 @@ export default function ProfilePage() {
 
   const changePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPwd.length < 6) {
-      toast.error('Contraseña muy corta', 'Usa al menos 6 caracteres.');
+    const problem = passwordProblem(newPwd, user?.username);
+    if (problem) {
+      toast.error('Contraseña no válida', problem);
       return;
     }
     if (newPwd !== confirmPwd) {
@@ -179,9 +182,9 @@ export default function ProfilePage() {
                 value={newPwd}
                 onChange={(e) => setNewPwd(e.target.value)}
                 autoComplete="new-password"
-                placeholder="••••••••"
+                placeholder={PASSWORD_HINT}
                 required
-                minLength={6}
+                minLength={MIN_PASSWORD_LENGTH}
               />
               <button
                 type="button"
@@ -192,6 +195,7 @@ export default function ProfilePage() {
                 {showNewPwd ? <IconEyeOff className="h-5 w-5" /> : <IconEye className="h-5 w-5" />}
               </button>
             </div>
+            <PasswordStrength password={newPwd} username={user?.username} />
           </div>
           <div>
             <label className="eyebrow mb-1 block" htmlFor="confirm-pwd">
@@ -217,6 +221,15 @@ export default function ProfilePage() {
                 {showConfirmPwd ? <IconEyeOff className="h-5 w-5" /> : <IconEye className="h-5 w-5" />}
               </button>
             </div>
+            {confirmPwd && (
+              <p
+                className={`mt-1.5 text-[12px] font-medium ${
+                  confirmPwd === newPwd ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+                }`}
+              >
+                {confirmPwd === newPwd ? '✓ Las contraseñas coinciden' : '✗ Las contraseñas no coinciden'}
+              </p>
+            )}
           </div>
         </form>
       </Modal>

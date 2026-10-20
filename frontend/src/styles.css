@@ -429,3 +429,13 @@
     transition-duration: 0.01ms !important;
   }
 }
+/* iOS (y algunos navegadores de Android) acercan la pantalla al enfocar un campo con
+   letra menor a 16px. En pantallas táctiles se fuerza 16px para que no haga zoom, sin
+   bloquear el zoom con los dedos. Va fuera de @layer para ganarle a text-sm y similares. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}

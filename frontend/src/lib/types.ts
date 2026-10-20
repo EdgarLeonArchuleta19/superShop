@@ -151,6 +151,55 @@ export interface ActivityResponse {
   surveysLast24h: number;
 }
 
+export type NotificationTone = 'info' | 'success' | 'warning' | 'danger';
+
+export interface AppNotification {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  /** 'security' | 'surveys' | 'backup' | … */
+  kind: string;
+  tone: NotificationTone;
+  title: string;
+  message: string;
+  /** Pantalla relacionada, p. ej. /app/ajustes/accesos */
+  link: string | null;
+  read: boolean;
+}
+
+export interface NotificationsResponse {
+  items: AppNotification[];
+  unread: number;
+}
+
+export interface AccessLogEntry {
+  id: number;
+  created_at: string;
+  username: string;
+  user_id: number | null;
+  success: boolean;
+  /** 'ok' | 'contraseña' | 'usuario' | 'bloqueado' */
+  reason: string;
+  ip: string | null;
+  country: string | null;
+  user_agent: string | null;
+}
+
+export interface LoginLock {
+  key: string;
+  kind: 'user' | 'ip';
+  value: string;
+  count: number;
+  locked_until: string;
+}
+
+export interface AccessLogResponse {
+  items: AccessLogEntry[];
+  locks: LoginLock[];
+  last24h: { ok: number; fail: number; failedIps: number };
+  behindCloudflare: boolean;
+}
+
 export interface Filters {
   branch_id: string;
   register_id: string;

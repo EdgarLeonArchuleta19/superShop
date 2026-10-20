@@ -20,7 +20,7 @@ const CACHE_KEY = 'nallely.settings';
 interface SettingsContextValue {
   settings: StoreSettings;
   ready: boolean;
-  /** Logo subido por la tienda, o null (usar <StoreLogo>, que muestra las iniciales). */
+  /** Logo subido por la tienda, o null (usar <StoreLogo>, que muestra el logo de SuperShop). */
   logo: string | null;
   save: (next: Partial<StoreSettings>) => Promise<StoreSettings>;
 }

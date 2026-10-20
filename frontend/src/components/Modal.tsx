@@ -14,13 +14,13 @@ export function Modal({ open, title, children, onClose, footer, wide }: ModalPro
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className={`anim-pop-in w-full ${wide ? 'max-w-2xl' : 'max-w-md'} rounded-t-3xl bg-surface shadow-pop ring-1 ring-line sm:rounded-3xl`}
+        className={`anim-pop-in w-full ${wide ? 'max-w-2xl' : 'max-w-md'} rounded-3xl bg-surface shadow-pop ring-1 ring-line`}
       >
         <div className="flex items-center justify-between border-b border-hairline px-5 py-4 sm:px-6">
           <h3 className="text-[17px] font-semibold tracking-tight">{title}</h3>

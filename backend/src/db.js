@@ -58,7 +58,9 @@ db.pragma('busy_timeout = 5000');
 
 export const now = () => new Date().toISOString();
 
-export const SESSION_TTL_HOURS = Number(process.env.SESSION_TTL_HOURS || 24);
+// La sesión se queda abierta mientras se use: cada día de uso la renueva por otros
+// SESSION_TTL_HOURS (90 días por defecto). Solo vence si no se abre en todo ese tiempo.
+export const SESSION_TTL_HOURS = Number(process.env.SESSION_TTL_HOURS || 24 * 90);
 
 export const sessionExpiresAt = () =>
   new Date(Date.now() + SESSION_TTL_HOURS * 60 * 60 * 1000).toISOString();
@@ -152,6 +154,50 @@ export function ensureSeed() {
     CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_sessions_closed ON sessions(closed_at);
 
+    -- Intentos fallidos de inicio de sesión por cuenta ("user:<nombre>") e IP ("ip:<dirección>").
+    CREATE TABLE IF NOT EXISTS login_failures (
+      key TEXT PRIMARY KEY,
+      count INTEGER NOT NULL,
+      last_at TEXT NOT NULL,
+      locked_until TEXT
+    );
+
+    -- Registro de accesos (se conservan 90 días).
+    CREATE TABLE IF NOT EXISTS login_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      username TEXT NOT NULL,
+      user_id INTEGER,
+      success INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      ip TEXT,
+      country TEXT,
+      user_agent TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_login_log_created ON login_log(created_at);
+
+    -- Notificaciones del panel (ver notifications.js) y el estado de cada usuario.
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      tone TEXT NOT NULL DEFAULT 'info',
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      link TEXT,
+      audience TEXT,
+      dedupe_key TEXT UNIQUE
+    );
+    CREATE INDEX IF NOT EXISTS idx_notifications_updated ON notifications(updated_at);
+    CREATE TABLE IF NOT EXISTS notification_state (
+      notification_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      read_at TEXT,
+      dismissed_at TEXT,
+      PRIMARY KEY (notification_id, user_id)
+    );
+
     CREATE TABLE IF NOT EXISTS surveys (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       client_uuid TEXT UNIQUE NOT NULL,
@@ -200,6 +246,9 @@ export function ensureSeed() {
     { name: 'tunnel_mode', type: "TEXT DEFAULT 'quick'" },
     { name: 'tunnel_token', type: 'TEXT' },
     { name: 'tunnel_hostname', type: 'TEXT' },
+    // Acceso solo con enlace privado (ver accessGate.js).
+    { name: 'access_gate', type: 'INTEGER NOT NULL DEFAULT 0' },
+    { name: 'access_key', type: 'TEXT' },
   ];
   for (const col of backupColumns) {
     try {

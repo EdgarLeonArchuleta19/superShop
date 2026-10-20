@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { db, now } from '../db.js';
 import { requireAuth, requirePermission, closeUserSessions } from '../middleware.js';
+import { passwordProblem } from '../passwords.js';
 
 const router = Router();
 
@@ -151,9 +152,8 @@ router.put('/password', requireAuth(), (req, res) => {
   if (!bcrypt.compareSync(String(current_password), user.password_hash)) {
     return bad(res, 401, 'La contraseña actual no coincide');
   }
-  if (String(new_password).length < 6) {
-    return bad(res, 400, 'La nueva contraseña debe tener al menos 6 caracteres');
-  }
+  const problem = passwordProblem(new_password, user.username);
+  if (problem) return bad(res, 400, problem);
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(
     bcrypt.hashSync(String(new_password), 10),
     user.id
@@ -220,7 +220,8 @@ router.post('/users', canManageUsers, (req, res) => {
   const role = getRole(req.body?.role_id);
   if (!name) return bad(res, 400, 'Escribe un nombre');
   if (!username || username.length < 3) return bad(res, 400, 'El usuario debe tener al menos 3 caracteres');
-  if (password.length < 6) return bad(res, 400, 'La contraseña debe tener al menos 6 caracteres');
+  const problem = passwordProblem(password, username);
+  if (problem) return bad(res, 400, problem);
   if (!role) return bad(res, 400, 'Selecciona un rol válido');
   if (role.is_admin && !req.access.is_admin) {
     return bad(res, 403, 'Solo un administrador puede crear otros administradores');
@@ -293,7 +294,8 @@ router.put('/users/:id', canManageUsers, (req, res) => {
   }
   if (req.body?.password) {
     const password = String(req.body.password);
-    if (password.length < 6) return bad(res, 400, 'La contraseña debe tener al menos 6 caracteres');
+    const problem = passwordProblem(password, cleanUsername(req.body.username) || row.username);
+    if (problem) return bad(res, 400, problem);
     closeSessions = true;
     updates.push('password_hash = ?');
     params.push(bcrypt.hashSync(password, 10));

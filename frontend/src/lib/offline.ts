@@ -155,9 +155,10 @@ async function sendBatches(
         online = false;
         break;
       }
-      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403 || err.status === 404)) {
         // Sesión vencida o sin permiso: se conservan en la cola (sin contar intento)
         // y se envían cuando alguien con acceso a "Mi encuesta" vuelva a iniciar sesión.
+        // 404: el dispositivo perdió el enlace privado; se envían cuando lo vuelva a abrir.
         break;
       }
       if (err instanceof ApiError && err.status === 400) {

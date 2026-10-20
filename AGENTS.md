@@ -72,6 +72,11 @@ No hay suite de tests automatizados. Para validar un cambio: `npm run typecheck`
 - Permisos: ver la sección "Roles y permisos". Protege las rutas con `requirePermission('clave')`, `requireAdmin` o `requireAuth()` de `middleware.js`, no con `requireAuth('admin')`.
 - Dependencias pesadas u opcionales (`googleapis`, `archiver`) se cargan con `import()` dinámico (ver `loadDeps()` en `backup.js`). Llama a `loadDeps()` antes de usarlas.
 - Frontend: componentes funcionales con TypeScript, clases de Tailwind y los componentes de `src/components`. Las llamadas al backend van por `api()` de `src/lib/api.ts`. Los avisos al usuario se muestran con `toast`.
+- Contraseñas: valida con `passwordProblem()` de `backend/src/passwords.js`; su copia en `frontend/src/lib/passwords.ts` debe tener las mismas reglas.
+- Notificaciones: créalas en el servidor con `notify()` de `backend/src/notifications.js`.
+  - `audience`: `'admin'`, una clave de permiso o `null` para todos.
+  - `dedupeKey`: agrupa avisos repetidos en uno que se actualiza.
+  - `notify()` nunca lanza error. El frontend las consulta con `useNotifications()` de `src/lib/notifications.ts`.
 - El kiosko es offline-first: las encuestas van a un outbox local y se sincronizan por lotes en `/api/surveys/batch`. No rompas ese flujo.
 - Registra los cambios relevantes en `CHANGELOG.md` (formato Keep a Changelog).
 
@@ -106,6 +111,18 @@ No hay suite de tests automatizados. Para validar un cambio: `npm run typecheck`
 - La ruta en Cloudflare debe apuntar a `http://localhost:<PORT>`.
 - `trust proxy` vale `loopback` por defecto, para leer la IP real que manda `cloudflared` (límite de intentos de inicio de sesión) y que la conexión fue https.
 - App de escritorio: cerrar la ventana la deja en la bandeja, sin apagar el servidor ni el túnel; "Salir" la apaga. Puede abrir sola al iniciar Windows (`--hidden`) y no permite dos copias abiertas.
+
+## Protección del inicio de sesión y del acceso web
+
+- `backend/src/security.js` concentra estas reglas:
+  - **Inicio de sesión:** los intentos fallidos van a `login_failures` (por cuenta e IP, con bloqueo creciente) y cada intento queda en `login_log`. La pantalla es `/app/ajustes/accesos`, solo para el Administrador.
+  - **Acceso web:** `originGuard` rechaza lo que no traiga `CF_ORIGIN_SECRET` y aplica `ALLOWED_COUNTRIES`. Sin esas variables no hace nada, así que el escritorio y la red local no se ven afectados.
+- `backend/src/accessGate.js` maneja el acceso solo con enlace privado:
+  - **Configuración:** se activa en `settings.access_gate` y la clave vive en `settings.access_key`; se maneja desde Vincular dispositivos, solo el Administrador.
+  - **Sin la cookie `ss_acceso`:** la API responde 404 y el resto muestra la página pública.
+  - **Siempre pasan:** `/api/health` y la ventana local de escritorio (loopback sin encabezados de proxy).
+  - **QR y direcciones:** las de `ConnectPage.tsx` agregan `?acceso=` con `withAccess()`.
+- Usa `clientIp(req)` para obtener la IP del visitante, no `req.ip`. Detrás de Cloudflare la IP real viene en `CF-Connecting-IP`.
 
 ## Secretos y credenciales
 

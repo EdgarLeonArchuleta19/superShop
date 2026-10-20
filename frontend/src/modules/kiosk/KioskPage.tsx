@@ -261,7 +261,6 @@ export default function KioskPage() {
             name={settings.store_name}
             logo={logo}
             className="h-9 w-9 rounded-xl ring-1 ring-line"
-            textClassName="text-[13px]"
           />
           <div className="leading-tight">
             <p className="text-sm font-semibold tracking-tight">{settings.store_name}</p>

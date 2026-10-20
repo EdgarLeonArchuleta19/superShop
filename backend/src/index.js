@@ -8,7 +8,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { CLOUD, ensureSeed } from './db.js';
 import authRoutes from './routes/auth.js';
 import publicRoutes from './routes/public.js';
@@ -24,6 +24,10 @@ import { scheduleBackups } from './backup.js';
 import { loadSurveys } from './store.js';
 import { requirePermission } from './middleware.js';
 import roleRoutes from './routes/roles.js';
+import securityRoutes from './routes/security.js';
+import notificationRoutes from './routes/notifications.js';
+import { clientIp, originGuard } from './security.js';
+import { accessGate } from './accessGate.js';
 
 await ensureSeed();
 // En la nube (Turso) no hay respaldos en carpeta local: Turso guarda su propio historial.
@@ -45,6 +49,10 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
 // envía la IP real del visitante (necesaria para el límite de intentos de inicio de sesión)
 // y que la conexión original fue https.
 app.set('trust proxy', TRUST_PROXY ? true : 'loopback');
+
+// Antes que todo: con CF_ORIGIN_SECRET solo pasa el tráfico que viene de Cloudflare
+// (y de los países de ALLOWED_COUNTRIES). Ver security.js.
+app.use(originGuard);
 
 app.use(
   helmet({
@@ -71,6 +79,8 @@ app.use(
 );
 
 app.use(compression());
+// Sin el enlace privado (si está activo) solo se ve la página informativa. Ver accessGate.js.
+app.use(accessGate);
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
 
@@ -91,11 +101,15 @@ if (process.env.NODE_ENV === 'production' && !ALLOWED_ORIGINS.length) {
 
 app.use(cors(corsOptions));
 
+// Detrás de Cloudflare la IP real viene en CF-Connecting-IP.
+const limiterKey = (req) => ipKeyGenerator(clientIp(req));
+
 const loginLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: limiterKey,
   message: { error: 'Demasiados intentos. Intenta de nuevo en 5 minutos.' },
 });
 
@@ -104,6 +118,7 @@ const batchLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: limiterKey,
   message: { error: 'Demasiadas solicitudes. Intenta de nuevo en un momento.' },
 });
 
@@ -136,6 +151,8 @@ app.get('/api/admin/surveys', requirePermission('surveys.responses', 'surveys.ex
 });
 
 app.use('/api/admin', roleRoutes);
+app.use('/api/admin', securityRoutes);
+app.use('/api', notificationRoutes);
 app.use('/api/admin', adminRoutes);
 
 const staticDir = process.env.FRONTEND_DIST || path.join(__dirname, '../../frontend/dist');

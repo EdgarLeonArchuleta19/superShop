@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { CLOUD, db } from '../db.js';
-import { requirePermission } from '../middleware.js';
+import { requireAdmin, requirePermission } from '../middleware.js';
+import { accessGateInfo, grantAccess, invalidateAccessGate, newAccessKey } from '../accessGate.js';
 import { getTunnelStatus, startTunnel, stopTunnel } from '../tunnel.js';
 import { lanIPv4 } from '../network.js';
 import { caCertificatePem, localHttps } from '../certs.js';
@@ -75,6 +76,7 @@ function payload() {
     lan: lanAddresses(),
     https: { enabled: localHttps.enabled, port: localHttps.port, certificateUrl: '/api/certificado-supershop.crt' },
     weakPasswordUsers: weakPasswordUsers(),
+    access: accessGateInfo(),
   };
 }
 
@@ -99,6 +101,27 @@ function parseHostname(input) {
     .replace(/[/?#:].*$/, '');
   return /^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(host) ? host : null;
 }
+
+// Acceso solo con enlace privado (ver accessGate.js). Solo el Administrador lo cambia.
+// Quien lo activa o genera un enlace nuevo recibe la cookie en ese momento, para no
+// quedarse fuera.
+router.put('/admin/access-gate', requireAdmin, (req, res) => {
+  const current = db.prepare('SELECT access_key FROM settings WHERE id = 1').get() || {};
+  const enabled = !!req.body?.enabled;
+  const key = current.access_key || newAccessKey();
+  db.prepare('UPDATE settings SET access_gate = ?, access_key = ? WHERE id = 1').run(enabled ? 1 : 0, key);
+  invalidateAccessGate();
+  if (enabled) grantAccess(req, res, key);
+  res.json(payload());
+});
+
+router.post('/admin/access-gate/regenerate', requireAdmin, (req, res) => {
+  const key = newAccessKey();
+  db.prepare('UPDATE settings SET access_key = ? WHERE id = 1').run(key);
+  invalidateAccessGate();
+  grantAccess(req, res, key);
+  res.json(payload());
+});
 
 // Certificado público de la tienda, para instalarlo en los dispositivos que usan la
 // dirección https de la red local. Es público por diseño (no lleva la llave privada).

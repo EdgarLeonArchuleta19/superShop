@@ -23,6 +23,11 @@ services:
         value: "true"
       - key: LOCAL_HTTPS
         value: "false"
+      # Países permitidos. Solo aplica cuando CF_ORIGIN_SECRET está definida (ver
+      # docs/DESPLIEGUE-WEB.md, paso 6). CF_ORIGIN_SECRET se agrega a mano en Render
+      # cuando Cloudflare ya envía la clave; antes de eso, cerraría el acceso.
+      - key: ALLOWED_COUNTRIES
+        value: MX
       # Se piden al crear el servicio (no se guardan en este archivo):
       - key: TURSO_DATABASE_URL
         sync: false

@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { db, now } from '../db.js';
 import { questions } from '../questions.js';
 import { getSession, requirePermission } from '../middleware.js';
+import { notify } from '../notifications.js';
+import { localDate } from '../store.js';
 
 const router = Router();
 
@@ -31,6 +33,33 @@ function lookupName(kind, id, given) {
   return nameStatements[kind].get(Number(id))?.name ?? null;
 }
 
+/** Un aviso por día con las calificaciones malas; cada nueva lo vuelve a marcar como no leído. */
+function notifyBadRatings() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const rows = db
+    .prepare(
+      `SELECT COALESCE(cashier_name, 'Sin cajero(a)') AS name, COUNT(*) AS c FROM surveys
+       WHERE rating = 'bad' AND created_at >= ? GROUP BY name ORDER BY c DESC`
+    )
+    .all(start.toISOString());
+  const total = rows.reduce((sum, r) => sum + r.c, 0);
+  if (!total) return;
+  const top = rows
+    .slice(0, 3)
+    .map((r) => `${r.name} (${r.c})`)
+    .join(', ');
+  notify({
+    kind: 'surveys',
+    tone: 'warning',
+    title: total === 1 ? 'Calificación mala hoy' : `${total} calificaciones malas hoy`,
+    message: `Por cajero(a): ${top}${rows.length > 3 ? '…' : ''}.`,
+    link: '/app/encuestas/respuestas',
+    audience: 'surveys.responses',
+    dedupeKey: `bad-ratings:${localDate(start.toISOString())}`,
+  });
+}
+
 /**
  * Recibe encuestas del kiosko en lotes (también las que se guardaron sin conexión y se
  * envían al volver la red). Cada una trae un client_uuid: si ya se recibió, se ignora,
@@ -51,6 +80,7 @@ function saveBatch(req, res) {
   );
 
   let accepted = 0;
+  let badAccepted = 0;
   const invalidUuids = [];
   const txn = db.transaction((arr) => {
     for (const item of arr) {
@@ -83,10 +113,14 @@ function saveBatch(req, res) {
         created,
         item.client_ts ?? created
       );
-      if (info.changes > 0) accepted++;
+      if (info.changes > 0) {
+        accepted++;
+        if (rating === 'bad') badAccepted++;
+      }
     }
   });
   txn(items);
+  if (badAccepted > 0) notifyBadRatings();
   res.json({
     accepted,
     duplicates: items.length - accepted - invalidUuids.length,

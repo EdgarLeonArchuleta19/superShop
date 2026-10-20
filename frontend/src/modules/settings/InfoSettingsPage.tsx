@@ -125,7 +125,6 @@ export default function InfoSettingsPage() {
                   name={displayName}
                   logo={logo}
                   className="h-28 w-28 rounded-3xl shadow-pop ring-1 ring-line"
-                  textClassName="text-[38px]"
                 />
                 <span className="absolute inset-0 grid place-items-center rounded-3xl bg-black/45 text-[12px] font-semibold text-white opacity-0 transition group-hover:opacity-100">
                   {logo ? 'Cambiar' : 'Subir logo'}
@@ -181,7 +180,7 @@ export default function InfoSettingsPage() {
               <p className="text-[12px] text-muted">
                 {logo
                   ? 'Logo: PNG, JPG o WEBP de hasta 600 KB. Se ve mejor si es cuadrado.'
-                  : 'Sin logo se usan las iniciales del nombre. Puedes subir una imagen PNG, JPG o WEBP de hasta 600 KB (de preferencia cuadrada).'}
+                  : 'Sin logo se usa el de SuperShop. Puedes subir una imagen PNG, JPG o WEBP de hasta 600 KB (de preferencia cuadrada).'}
               </p>
             </div>
           </div>
@@ -193,7 +192,6 @@ export default function InfoSettingsPage() {
                 name={displayName}
                 logo={logo}
                 className="h-11 w-11 shrink-0 rounded-lg"
-                textClassName="text-[15px]"
               />
               <div className="min-w-0 leading-tight">
                 <p className="truncate text-[15px] font-bold text-[#2b46c4]">

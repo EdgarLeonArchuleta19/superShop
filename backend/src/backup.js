@@ -13,6 +13,7 @@ import crypto from 'node:crypto';
 import AdmZip from 'adm-zip';
 import Database from 'better-sqlite3';
 import { db, now, DATA_DIR, seedRoles } from './db.js';
+import { notify } from './notifications.js';
 
 const FILE_PREFIX = 'supershop-backup-';
 const FILE_RE = /^supershop-backup-[\w-]+\.zip$/;
@@ -288,8 +289,9 @@ async function buildZip(destPath) {
     try {
       snap.pragma('journal_mode = DELETE');
       snap.prepare('DELETE FROM sessions').run();
+      snap.prepare('DELETE FROM login_failures').run();
       snap
-        .prepare('UPDATE settings SET backup_google_drive_tokens = NULL, backup_drive_email = NULL, tunnel_token = NULL')
+        .prepare('UPDATE settings SET backup_google_drive_tokens = NULL, backup_drive_email = NULL, tunnel_token = NULL, access_key = NULL')
         .run();
       snap.exec('VACUUM');
     } finally {
@@ -523,18 +525,35 @@ function friendlyError(e, target) {
 // Ejecución (manual y programada)
 // ---------------------------------------------------------------------------
 
+function notifyBackup(target, tone, message) {
+  const where = target === 'drive' ? 'en Google Drive' : 'local';
+  notify({
+    kind: 'backup',
+    tone,
+    title: tone === 'danger' ? `Falló el respaldo ${where}` : `Respaldo ${where} restablecido`,
+    message,
+    link: '/app/ajustes/respaldos',
+    audience: 'settings.backups',
+    dedupeKey: `backup:${target}`,
+  });
+}
+
 /** Crea un respaldo en `target` ('local' | 'drive'). Lanza BackupError con mensaje para el usuario. */
 export function runBackup(target) {
   return exclusive(async () => {
     const { retention } = getConfig();
     try {
       const result = target === 'drive' ? await uploadToDrive(retention) : await createLocalBackup(retention);
+      const hadError = !!getStatus()[target].lastError;
       setStatus(target, { lastRun: now(), lastFile: result.name, lastError: null, lastErrorAt: null });
+      // Solo se avisa si antes había fallado: un respaldo correcto cada semana no es noticia.
+      if (hadError) notifyBackup(target, 'success', 'El respaldo volvió a funcionar correctamente.');
       return result;
     } catch (e) {
       const message = friendlyError(e, target);
       if (!(e instanceof BackupError)) console.error(`[Backup] Error en respaldo ${target}:`, e);
       setStatus(target, { lastError: message, lastErrorAt: now() });
+      notifyBackup(target, 'danger', message);
       // Acceso revocado: se olvida la conexión para que la pantalla pida reconectar.
       if (target === 'drive' && /Vuelve a conectar/.test(message)) {
         writeColumns({ backup_google_drive_tokens: null, backup_drive_email: null });

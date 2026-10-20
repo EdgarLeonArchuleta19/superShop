@@ -31,7 +31,7 @@ import type {
   StatsResponse,
   Survey,
 } from '../../lib/types';
-import FilterBar, { defaultFilters } from './components/FilterBar';
+import FilterBar, { defaultFilters, filtersQuery } from './components/FilterBar';
 import { Spinner } from '../../components/Modal';
 import { IconDownload, IconRefresh } from '../../components/Icons';
 import FaceIcon from '../../components/FaceIcon';
@@ -291,13 +291,7 @@ export default function DashboardPage() {
       .catch(() => setError('No se pudieron cargar los filtros'));
   }, []);
 
-  const qs = useMemo(() => {
-    const p = new URLSearchParams();
-    (Object.keys(filters) as (keyof Filters)[]).forEach((k) => {
-      if (filters[k]) p.set(k, filters[k]);
-    });
-    return p.toString();
-  }, [filters]);
+  const qs = useMemo(() => filtersQuery(filters), [filters]);
 
   useEffect(() => {
     let alive = true;
@@ -428,7 +422,7 @@ export default function DashboardPage() {
               })
               .finally(() => setLoading(false));
           }}
-          className="btn h-[38px] px-4 text-sm"
+          className="btn h-[38px] bg-brand-600 px-4 text-sm text-white hover:bg-brand-700"
           disabled={loading}
         >
           <IconRefresh className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />

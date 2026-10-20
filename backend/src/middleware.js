@@ -2,6 +2,7 @@ import { db, now, sessionExpiresAt, SESSION_TTL_HOURS } from './db.js';
 import { PERMISSIONS, parsePermissions } from './permissions.js';
 
 const TTL_MS = SESSION_TTL_HOURS * 60 * 60 * 1000;
+const RENEW_EVERY_MS = Math.min(24 * 60 * 60 * 1000, TTL_MS / 2);
 
 export function mapSession(session) {
   if (!session) return null;
@@ -32,8 +33,9 @@ export function getSession(token) {
     db.prepare('UPDATE sessions SET closed_at = ? WHERE id = ?').run(now(), session.id);
     return null;
   }
+  // Se renueva como máximo una vez al día para no escribir en la base en cada petición.
   const remaining = new Date(session.expires_at).getTime() - Date.now();
-  if (remaining < TTL_MS / 2) touchSession(token);
+  if (remaining < TTL_MS - RENEW_EVERY_MS) touchSession(token);
   return session;
 }
 

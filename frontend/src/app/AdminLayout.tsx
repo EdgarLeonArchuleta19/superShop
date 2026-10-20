@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useTheme } from '../lib/theme';
-import { sessionLabel, timeAgo } from '../lib/format';
 import { useSettings } from '../lib/settings';
-import type { ActivityResponse, AuthUser } from '../lib/types';
+import { useNotifications } from '../lib/notifications';
+import type { AppNotification, AuthUser } from '../lib/types';
+import NotificationsPanel from './NotificationsPanel';
 import { can } from '../lib/permissions';
 import { ThemeToggleButton, ConfirmDialog } from '../components/Modal';
 import {
@@ -24,6 +24,7 @@ import {
   IconRegister,
   IconSettings,
   IconShield,
+  IconLock,
   IconStore,
   IconUser,
   IconUsers,
@@ -86,6 +87,7 @@ const MENU: MenuEntry[] = [
       { to: '/app/ajustes/perfil', label: 'Perfil', icon: IconUser },
       { to: '/app/ajustes/usuarios', label: 'Usuarios', icon: IconUsers, perm: 'settings.users' },
       { to: '/app/ajustes/roles', label: 'Roles y permisos', icon: IconShield, perm: 'admin' },
+      { to: '/app/ajustes/accesos', label: 'Registro de accesos', icon: IconLock, perm: 'admin' },
       { to: '/app/ajustes/respaldos', label: 'Respaldos e Importaciones', icon: IconFileArchive, perm: 'settings.backups', desktopOnly: true },
       { to: '/app/ajustes/informacion', label: 'Información', icon: IconInfo, perm: 'settings.info' },
       { to: '/app/ajustes/conectar', label: 'Vincular dispositivos', icon: IconCloudCheck, perm: 'settings.connect' },
@@ -103,28 +105,11 @@ const TITLES: Record<string, string> = {
   '/app/ajustes/perfil': 'Perfil',
   '/app/ajustes/usuarios': 'Usuarios',
   '/app/ajustes/roles': 'Roles y permisos',
+  '/app/ajustes/accesos': 'Registro de accesos',
   '/app/ajustes/respaldos': 'Respaldos e Importaciones',
   '/app/ajustes/informacion': 'Información',
   '/app/ajustes/conectar': 'Vincular dispositivos',
 };
-
-/** Cierre automático por inactividad en el panel admin. 30 minutos. */
-const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
-const IDLE_EVENTS = [
-  'mousemove',
-  'mousedown',
-  'keydown',
-  'wheel',
-  'scroll',
-  'touchstart',
-] as const;
-
-interface Notif {
-  id: number;
-  title: string;
-  message: string;
-  tone?: 'info' | 'danger';
-}
 
 function useVisibleMenu(user: AuthUser | null) {
   const { settings } = useSettings();
@@ -384,19 +369,15 @@ function UserCard({
 
 export default function AdminLayout() {
   const { user, logout, refresh } = useAuth();
-  const { settings } = useSettings();
   const { theme, toggle } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
-  const [notifs, setNotifs] = useState<Notif[]>([]);
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem('sidebar-collapsed') === '1'
   );
-
-  const isAdmin = !!user?.is_admin;
 
   useEffect(() => {
     setMenuOpen(false);
@@ -411,76 +392,33 @@ export default function AdminLayout() {
     localStorage.setItem('sidebar-collapsed', collapsed ? '1' : '0');
   }, [collapsed]);
 
+  // El aviso del navegador también abre la notificación (el hook guarda la función más reciente).
+  const notifications = useNotifications(!!user, (n) => openNotification(n));
+  const unread = notifications.unread;
+  const openNotification = (n: AppNotification) => {
+    if (!n.read) notifications.markRead(n.id);
+    if (n.link) {
+      setNotifOpen(false);
+      navigate(n.link);
+    }
+  };
+
+  // "(3) SuperShop": el contador también se ve en la pestaña del navegador.
+  const baseTitle = useRef(document.title.replace(/^\(\d+\+?\)\s*/, ''));
   useEffect(() => {
-    setNotifs([
-      {
-        id: 1,
-        title: 'Bienvenido',
-        message: `Hola ${user?.name || 'Usuario'}, bienvenido al panel de ${settings.store_name}.`,
-      },
-    ]);
-  }, [user?.name, settings.store_name]);
-
-  const seenClosures = useRef<Set<number>>(new Set());
-
-  const loadActivity = useCallback(() => {
-    if (!isAdmin) return;
-    api<ActivityResponse>('/api/admin/activity')
-      .then((res) => {
-        const fresh = res.recentClosures
-          .filter((s) => !seenClosures.current.has(s.id))
-          .slice(0, 5);
-        if (fresh.length === 0) return;
-        fresh.forEach((s) => seenClosures.current.add(s.id));
-        setNotifs((prev) => [
-          ...fresh.map((s) => ({
-            id: 1_000_000 + s.id,
-            title: 'Cierre de sesión',
-            message: `${sessionLabel(s)} cerró sesión${
-              s.closed_at ? ` · ${timeAgo(s.closed_at)}` : ''
-            }`,
-          })),
-          ...prev,
-        ]);
-      })
-      .catch(() => undefined);
-  }, [isAdmin]);
-
-  useEffect(() => {
-    loadActivity();
-    const timer = window.setInterval(loadActivity, 30000);
-    return () => window.clearInterval(timer);
-  }, [loadActivity]);
+    document.title = unread > 0 ? `(${unread > 99 ? '99+' : unread}) ${baseTitle.current}` : baseTitle.current;
+  }, [unread]);
+  useEffect(() => () => void (document.title = baseTitle.current), []);
 
   const doLogout = useCallback(async () => {
     await logout('logout');
     navigate('/login', { replace: true });
   }, [logout, navigate]);
 
-  // Auto-cierre por inactividad (solo panel admin; el kiosko nunca cierra solo).
-  useEffect(() => {
-    let timer = window.setTimeout(() => void logout('idle'), IDLE_TIMEOUT_MS);
-    let last = Date.now();
-    const reset = () => {
-      const now = Date.now();
-      if (now - last < 5000) return;
-      last = now;
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => void logout('idle'), IDLE_TIMEOUT_MS);
-    };
-    for (const ev of IDLE_EVENTS) window.addEventListener(ev, reset, { passive: true });
-    return () => {
-      window.clearTimeout(timer);
-      for (const ev of IDLE_EVENTS) window.removeEventListener(ev, reset);
-    };
-  }, [logout]);
-
   const askLogout = useCallback(() => {
     setMenuOpen(false);
     setExitOpen(true);
   }, []);
-
-  const unread = notifOpen ? 0 : notifs.length;
 
   return (
     <div className="flex h-dvh overflow-hidden bg-canvas text-ink">
@@ -527,58 +465,17 @@ export default function AdminLayout() {
       )}
 
       {notifOpen && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="animate-fade-in absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setNotifOpen(false)}
-          />
-          <aside className="anim-notif-in absolute inset-y-0 right-0 flex w-80 max-w-[88vw] flex-col border-l border-line bg-surface">
-            <div className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
-              <div className="flex items-center gap-2">
-                <IconBell className="h-5 w-5 text-brand-600" />
-                <p className="text-sm font-semibold tracking-tight">Notificaciones</p>
-              </div>
-              <button
-                onClick={() => setNotifOpen(false)}
-                className="btn-ghost h-9 w-9"
-                aria-label="Cerrar notificaciones"
-              >
-                <IconX className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
-              {notifs.length === 0 ? (
-                <div className="grid place-items-center gap-2 py-16 text-center text-muted">
-                  <IconBell className="h-7 w-7" />
-                  <p className="text-sm">No tienes notificaciones</p>
-                </div>
-              ) : (
-                notifs.map((n) => (
-                  <div
-                    key={n.id}
-                    className={`rounded-2xl border p-3.5 ${
-                      n.tone === 'danger'
-                        ? 'border-red-600/20 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10'
-                        : 'border-line bg-faint'
-                    }`}
-                  >
-                    <p className="text-[13px] font-semibold text-ink">{n.title}</p>
-                    <p className="mt-0.5 text-[13px] text-muted">{n.message}</p>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {notifs.length > 0 && (
-              <div className="shrink-0 border-t border-line p-3">
-                <button onClick={() => setNotifs([])} className="btn-soft h-9 w-full text-[13px]">
-                  Limpiar avisos
-                </button>
-              </div>
-            )}
-          </aside>
-        </div>
+        <NotificationsPanel
+          items={notifications.items}
+          unread={unread}
+          loaded={notifications.loaded}
+          onClose={() => setNotifOpen(false)}
+          onOpen={openNotification}
+          onMarkRead={notifications.markRead}
+          onMarkAllRead={notifications.markAllRead}
+          onDismiss={notifications.dismiss}
+          onDismissRead={notifications.dismissRead}
+        />
       )}
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -618,7 +515,7 @@ export default function AdminLayout() {
               <IconBell className="h-5 w-5" />
               {unread > 0 && (
                 <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
-                  {unread}
+                  {unread > 9 ? '9+' : unread}
                 </span>
               )}
             </button>

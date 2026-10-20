@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/auth';
+import { ApiError } from '../../lib/api';
 import { useInstall } from '../../lib/install';
 import { useTheme } from '../../lib/theme';
 import { useSettings } from '../../lib/settings';
@@ -31,7 +32,13 @@ export default function LoginPage() {
       await login(username, password);
       navigate('/app', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error inesperado');
+      // 404 en el login: el acceso con enlace privado está activo y este dispositivo
+      // todavía no lo abrió (o se generó un enlace nuevo).
+      if (err instanceof ApiError && err.status === 404) {
+        setError('Este dispositivo no tiene acceso. Abre el enlace privado que te dio el administrador.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Error inesperado');
+      }
     } finally {
       setLoading(false);
     }

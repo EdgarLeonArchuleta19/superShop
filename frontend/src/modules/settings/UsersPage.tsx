@@ -6,6 +6,8 @@ import type { AdminUserRow, RoleRow } from '../../lib/types';
 import { ConfirmDialog, Modal, Spinner } from '../../components/Modal';
 import Select from '../../components/Select';
 import Pagination from '../../components/Pagination';
+import { PASSWORD_HINT, passwordProblem } from '../../lib/passwords';
+import PasswordStrength from '../../components/PasswordStrength';
 import {
   IconCheck, IconPencil, IconPlus, IconUser, IconX,
 } from '../../components/Icons';
@@ -110,6 +112,11 @@ export default function UsersPage() {
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form) return;
+    const problem = form.password ? passwordProblem(form.password, form.username) : null;
+    if (problem) {
+      setFormError(problem);
+      return;
+    }
     setSaving(true);
     setFormError('');
     try {
@@ -349,10 +356,11 @@ export default function UsersPage() {
                 className="input"
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
-                placeholder={form.id ? 'Dejar en blanco para no cambiar' : 'Mínimo 6 caracteres'}
+                placeholder={form.id ? 'Dejar en blanco para no cambiar' : PASSWORD_HINT}
                 autoComplete="new-password"
                 required={!form.id}
               />
+              <PasswordStrength password={form.password} username={form.username} />
             </div>
           </form>
         )}
