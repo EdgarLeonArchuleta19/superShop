@@ -110,28 +110,32 @@ export function enqueueSurvey(payload: SurveyPayload): void {
   write(items);
 }
 
-let unratedRecovered = false;
+let failedRecovered = false;
 
 /**
- * Antes el servidor rechazaba como inválidas las encuestas sin carita (nadie tocó ninguna).
- * Ahora las acepta como "Sin respuesta": las que quedaron como fallidas por eso vuelven a
- * la cola una vez, para que no se pierdan sus respuestas.
+ * Una vez por carga de la app, vuelven a la cola las fallidas que pueden enviarse ya:
+ * - las sin carita: antes el servidor las rechazaba como inválidas y ahora las acepta
+ *   como "Sin respuesta";
+ * - las de falla del servidor (5xx): el servidor pudo haberse corregido.
+ * Es seguro: el servidor ignora las que ya recibió (client_uuid).
  */
-function recoverUnratedFailed(): void {
-  if (unratedRecovered) return;
-  unratedRecovered = true;
+function recoverFailedOnce(): void {
+  if (failedRecovered) return;
+  failedRecovered = true;
   const failed = readFailed();
-  const unrated = failed.filter((f) => f.reason === 'invalid' && f.payload.rating == null);
-  if (!unrated.length) return;
+  const recoverable = failed.filter(
+    (f) => f.reason === 'server' || (f.reason === 'invalid' && f.payload.rating == null)
+  );
+  if (!recoverable.length) return;
   const queued = read();
   const items = [
     ...queued,
-    ...unrated
+    ...recoverable
       .filter((f) => !queued.some((q) => q.uuid === f.uuid))
       .map((f) => ({ uuid: f.uuid, payload: f.payload, queuedAt: f.queuedAt, attempts: 0 })),
   ];
   write(items);
-  writeFailed(failed.filter((f) => !unrated.includes(f)));
+  writeFailed(failed.filter((f) => !recoverable.includes(f)));
 }
 
 /** Devuelve las encuestas fallidas a la cola para reintentar su envío. */
@@ -224,7 +228,7 @@ async function sendBatches(
 }
 
 export async function flushOutbox(): Promise<FlushResult> {
-  recoverUnratedFailed();
+  recoverFailedOnce();
   const items = read();
   const failed = getFailedCount();
   if (!items.length) return { sent: 0, pending: 0, failed, online: true };

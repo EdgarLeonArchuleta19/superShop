@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { IconX } from './Icons';
 
 interface ModalProps {
@@ -12,7 +13,9 @@ interface ModalProps {
 
 export function Modal({ open, title, children, onClose, footer, wide }: ModalProps) {
   if (!open) return null;
-  return (
+  // Se dibuja en <body>: dentro de un contenedor con backdrop-blur (como la barra del
+  // kiosko), "fixed" se acomoda respecto a ese contenedor y el modal salía cortado arriba.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
       onMouseDown={(e) => {
@@ -20,9 +23,9 @@ export function Modal({ open, title, children, onClose, footer, wide }: ModalPro
       }}
     >
       <div
-        className={`anim-pop-in w-full ${wide ? 'max-w-2xl' : 'max-w-md'} rounded-3xl bg-surface shadow-pop ring-1 ring-line`}
+        className={`anim-pop-in flex max-h-[calc(100dvh-2rem)] w-full flex-col ${wide ? 'max-w-2xl' : 'max-w-md'} rounded-3xl bg-surface shadow-pop ring-1 ring-line`}
       >
-        <div className="flex items-center justify-between border-b border-hairline px-5 py-4 sm:px-6">
+        <div className="flex shrink-0 items-center justify-between border-b border-hairline px-5 py-4 sm:px-6">
           <h3 className="text-[17px] font-semibold tracking-tight">{title}</h3>
           <button
             onClick={onClose}
@@ -32,14 +35,15 @@ export function Modal({ open, title, children, onClose, footer, wide }: ModalPro
             <IconX className="h-5 w-5" />
           </button>
         </div>
-        <div className="max-h-[70dvh] overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-hairline px-5 py-4 sm:px-6">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-hairline px-5 py-4 sm:px-6">
             {footer}
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

@@ -6,7 +6,7 @@ import type { FailedSurvey } from '../../lib/offline';
 
 const REASON_LABEL: Record<FailedSurvey['reason'], string> = {
   invalid: 'Datos incompletos',
-  server: 'Error del servidor',
+  server: 'Falla del servidor',
   unknown: 'Error desconocido',
 };
 
@@ -41,6 +41,7 @@ export default function FailedOutbox() {
       >
         <IconAlert className="h-4 w-4" />
         {failedCount}
+        <span className="hidden sm:inline">sin enviar</span>
       </button>
 
       <Modal
@@ -67,10 +68,16 @@ export default function FailedOutbox() {
           </>
         }
       >
-        <p className="text-[14px] leading-relaxed text-ink/80">
-          Estas encuestas no se pudieron enviar al servidor. Puedes reintentar el envío o
-          descartarlas de forma permanente.
-        </p>
+        <div className="space-y-2 text-[14px] leading-relaxed text-ink/80">
+          <p>
+            Estas encuestas se contestaron en este dispositivo pero <strong>no llegaron al servidor</strong>{' '}
+            (por ejemplo, por una falla del servidor o porque el dispositivo no tenía acceso). Siguen guardadas aquí.
+          </p>
+          <p>
+            Toca <strong>Reintentar</strong> para enviarlas de nuevo: no se duplican. <strong>Descartar</strong> las
+            borra para siempre.
+          </p>
+        </div>
         <ul className="mt-4 max-h-72 space-y-2 overflow-y-auto">
           {items.map((f) => (
             <li
@@ -79,9 +86,9 @@ export default function FailedOutbox() {
             >
               <div className="min-w-0">
                 <p className="truncate text-[13px] font-medium text-ink/85">
-                  {f.payload.cashier_id ? `Caja #${f.payload.register_id ?? '—'}` : 'Encuesta'}
+                  Contestada el {fmtWhen(f.queuedAt)}
                 </p>
-                <p className="truncate text-[12px] text-muted">{fmtWhen(f.failedAt)}</p>
+                <p className="truncate text-[12px] text-muted">Falló el {fmtWhen(f.failedAt)}</p>
               </div>
               <span className="shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-600 dark:bg-red-500/15 dark:text-red-300">
                 {REASON_LABEL[f.reason]}
