@@ -74,6 +74,7 @@ Todas las versiones notables documentadas aquí. Formato basado en [Keep a Chang
   - "Generar enlace nuevo" revoca el anterior.
   - La ventana de escritorio siempre entra, y `ACCESS_GATE_DISABLED=true` lo apaga en caso de emergencia.
   - El kiosko conserva sus encuestas si pierde el acceso y las envía al recuperarlo.
+  - Un dispositivo sin el enlace que ya tenía la app guardada (PWA) ya no muestra el login de esa copia: la borra y muestra la página pública.
 - **Protección contra fuerza bruta guardada en la base**: 5 contraseñas incorrectas en una cuenta la bloquean 1 minuto, y la espera se duplica con cada fallo extra hasta 15 minutos. Una IP se bloquea a partir de 15 fallos. Los bloqueos sobreviven reinicios del servidor. Si el usuario no existe, la respuesta tarda lo mismo, para no revelar qué usuarios existen.
 - **Registro de accesos** (Ajustes → Registro de accesos, solo Administrador): cada intento de inicio de sesión con fecha, IP, país y dispositivo, bloqueos activos con botón para desbloquear, y aviso en la campana con 5 o más fallos en una hora. Se conserva 90 días.
 - **Versión web solo por Cloudflare y solo desde México**: con `CF_ORIGIN_SECRET` el servidor rechaza lo que no venga de Cloudflare (la dirección directa de Render deja de funcionar), y con `ALLOWED_COUNTRIES=MX` rechaza otros países y la red Tor. Detrás de Cloudflare, la IP real se toma de `CF-Connecting-IP`. Guía en `docs/DESPLIEGUE-WEB.md` (paso 6).

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { api } from './api';
+import { api, ApiError } from './api';
+import { accessConfirmed, leaveWithoutAccess } from './access';
 
 export interface StoreSettings {
   store_name: string;
@@ -52,11 +53,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     let alive = true;
     api<{ settings: StoreSettings }>('/api/settings')
       .then((res) => {
+        accessConfirmed();
         if (!alive || !res.settings) return;
         setSettings(res.settings);
         writeCache(res.settings);
       })
-      .catch(() => undefined)
+      .catch((err) => {
+        // 404: enlace privado activo y este dispositivo no lo tiene (ver lib/access.ts).
+        if (err instanceof ApiError && err.status === 404) void leaveWithoutAccess();
+      })
       .finally(() => {
         if (alive) setReady(true);
       });

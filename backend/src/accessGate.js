@@ -85,6 +85,24 @@ function isLocalWindow(req) {
   return loopback && !req.headers['cf-connecting-ip'] && !req.headers['x-forwarded-for'];
 }
 
+/**
+ * Service worker de reemplazo para dispositivos sin acceso que ya tenían la app guardada
+ * para funcionar sin conexión: esa copia se abre sin preguntarle al servidor. Al buscar
+ * actualización reciben esto, que borra la copia, se da de baja y recarga la pestaña,
+ * así se ve la página pública. Las encuestas pendientes (localStorage) no se tocan.
+ */
+const REMOVE_OFFLINE_APP_SW = `self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map((k) => caches.delete(k)));
+    await self.registration.unregister();
+    const windows = await self.clients.matchAll({ type: 'window' });
+    for (const w of windows) w.navigate(w.url);
+  })());
+});
+`;
+
 /** Imágenes que la página pública necesita aunque no se tenga el enlace. */
 const PUBLIC_FILES = new Set(['/supershop_fondo_azul.png', '/icon-192.png']);
 
@@ -147,6 +165,7 @@ export function accessGate(req, res, next) {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   res.setHeader('Cache-Control', 'no-store');
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'No encontrado' });
+  if (req.path === '/sw.js') return res.type('application/javascript').send(REMOVE_OFFLINE_APP_SW);
   const status = req.path === '/' ? 200 : 404;
   return res.status(status).type('html').send(landingPage());
 }
