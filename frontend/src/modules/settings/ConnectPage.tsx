@@ -676,6 +676,24 @@ export default function ConnectPage() {
     </div>
   );
 
+  const privateOn = info.access.enabled;
+  const privateAccess = isAdmin ? (
+    <PrivateAccess
+      access={info.access}
+      busy={busy}
+      onSave={(enabled) =>
+        void call('/api/admin/access-gate', { enabled }, 'PUT').then(
+          (ok) => ok && toast.update(enabled ? 'Acceso privado activo' : 'Acceso privado apagado')
+        )
+      }
+      onRegenerate={() =>
+        void call('/api/admin/access-gate/regenerate').then(
+          (ok) => ok && toast.update('Enlace nuevo generado', 'Comparte el nuevo enlace o QR con tu personal.')
+        )
+      }
+    />
+  ) : null;
+
   const desktopAutostart = desktop?.setAutostart && openAtLogin !== null && (
     <div className="flex items-start justify-between gap-3 border-t border-line pt-4">
       <div>
@@ -700,35 +718,22 @@ export default function ConnectPage() {
 
       {weakPasswords}
 
-      {isAdmin && (
-        <AccessGateCard
-          access={info.access}
-          busy={busy}
-          onCopy={(link) => void copy(link)}
-          onSave={(enabled) =>
-            void call('/api/admin/access-gate', { enabled }, 'PUT').then(
-              (ok) => ok && toast.update(enabled ? 'Enlace privado activo' : 'Enlace privado desactivado')
-            )
-          }
-          onRegenerate={() =>
-            void call('/api/admin/access-gate/regenerate').then(
-              (ok) => ok && toast.update('Enlace nuevo generado', 'Comparte el nuevo enlace con tu personal.')
-            )
-          }
-        />
-      )}
-
       {publicOrigin ? (
         <Card
           icon={<IconCloudCheck className="h-5 w-5" />}
           title="Tu SuperShop ya está en internet"
-          subtitle="Cualquier dispositivo con internet puede entrar con esta dirección."
+          subtitle={
+            privateOn
+              ? 'Solo entra quien tenga este enlace privado.'
+              : 'Cualquier dispositivo con internet puede entrar con esta dirección.'
+          }
         >
           <div className="space-y-5">
+            {privateAccess}
             <AddressBox url={publicOrigin} onCopy={(link) => void copy(link)} />
             <Steps
               items={[
-                'Escanea el código con la cámara del celular, o abre la dirección en el navegador.',
+                `Escanea el código con la cámara del celular, o abre ${privateOn ? 'el enlace' : 'la dirección'} en el navegador.`,
                 'Sigue los pasos para instalar la app y inicia sesión.',
               ]}
             />
@@ -745,6 +750,7 @@ export default function ConnectPage() {
           >
             <div className="space-y-5">
               <FixedStatus tunnel={info.tunnel} port={info.port} busy={busy} onRetry={() => void call('/api/admin/tunnel/start')} />
+              {privateAccess}
               <AddressBox url={fixedUrl} onCopy={(link) => void copy(link)} qrSize={176} />
               <div className="space-y-3 border-t border-line pt-4">
                 <p className="text-[13px] font-semibold text-ink">Cómo conectar un celular o computadora (una sola vez)</p>
@@ -807,6 +813,7 @@ export default function ConnectPage() {
                 title="Computadoras y tablets de la tienda"
                 subtitle="Por la red de la tienda (mismo módem o wifi). No necesita internet."
               >
+                {privateAccess && <div className="mb-5">{privateAccess}</div>}
                 <LanSection info={info} copy={(u) => void copy(u)} />
               </Card>
 
@@ -847,97 +854,81 @@ export default function ConnectPage() {
   );
 }
 
-/** Acceso solo con enlace privado: solo el Administrador lo activa o cambia. */
-function AccessGateCard({
+/**
+ * Interruptor de acceso privado, dentro de la tarjeta del QR (solo Administrador). Al
+ * activarlo, la dirección y el QR de esa tarjeta pasan a ser el enlace privado.
+ */
+function PrivateAccess({
   access,
   busy,
   onSave,
   onRegenerate,
-  onCopy,
 }: {
   access: ConnectInfo['access'];
   busy: boolean;
   onSave: (enabled: boolean) => void;
   onRegenerate: () => void;
-  onCopy: (link: string) => void;
 }) {
   const [confirmEnable, setConfirmEnable] = useState(false);
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
-  const origin = window.location.origin;
-  const showLink = access.key && isPublicHost(window.location.hostname);
-  const link = access.key ? withAccess(origin, '/', access.key) : '';
 
   return (
-    <Card
-      icon={<IconLock className="h-5 w-5" />}
-      title="Acceso solo con enlace privado"
-      subtitle="Quien no tenga el enlace solo ve una página de presentación de SuperShop; no puede llegar al inicio de sesión."
-      badge={
-        access.enabled && (
-          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-            Activo
-          </span>
-        )
-      }
+    <div
+      className={`space-y-3 rounded-2xl border px-4 py-3.5 ${
+        access.enabled
+          ? 'border-emerald-500/30 bg-emerald-50/60 dark:bg-emerald-500/10'
+          : 'border-line bg-faint'
+      }`}
     >
-      <div className="space-y-4">
-        {access.forcedOff && (
-          <div className="flex items-start gap-2.5 rounded-xl bg-amber-50 px-3.5 py-3 text-[13px] text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
-            <IconAlert className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>
-              Está apagado por la variable <Mono>ACCESS_GATE_DISABLED</Mono> del servidor. Quítala para que vuelva a
-              funcionar.
-            </p>
-          </div>
-        )}
-
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[14px] font-semibold text-ink">Pedir el enlace privado para entrar</p>
-            <p className="text-[12px] text-muted">
-              Cada dispositivo abre el enlace (o escanea el QR de esta pantalla) una sola vez y queda autorizado por un
-              año. Esta computadora siempre puede entrar.
-            </p>
-          </div>
-          <Switch
-            label="Pedir el enlace privado"
-            checked={access.enabled}
-            onChange={(v) => (v ? setConfirmEnable(true) : onSave(false))}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <IconLock
+            className={`mt-0.5 h-4 w-4 shrink-0 ${access.enabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted'}`}
           />
-        </div>
-
-        {access.enabled && (
-          <>
-            {showLink && (
-              <div className="space-y-2">
-                <p className="eyebrow">Enlace privado</p>
-                <p className="break-all rounded-xl bg-faint px-3.5 py-3 font-mono text-[13px] font-semibold text-ink">{link}</p>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={() => onCopy(link)} className="btn-soft h-9 px-3.5 text-[13px]">
-                    <IconCopy className="h-4 w-4" />
-                    Copiar
-                  </button>
-                </div>
-              </div>
-            )}
-            <p className="text-[12px] text-muted">
-              Las direcciones y códigos QR de esta pantalla ya incluyen el enlace privado. Guárdalo en un lugar seguro y
-              compártelo solo con tu personal: quien lo tenga puede llegar al inicio de sesión.
+          <div className="min-w-0">
+            <p className="text-[14px] font-semibold text-ink">
+              Acceso privado{' '}
+              <span className={access.enabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted'}>
+                · {access.enabled ? 'Activo' : 'Apagado'}
+              </span>
             </p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setConfirmRegenerate(true)}
-                disabled={busy}
-                className="btn-ghost h-9 px-3.5 text-[13px] text-red-600"
-              >
-                <IconRefresh className="h-4 w-4" />
-                Generar enlace nuevo
-              </button>
-            </div>
-          </>
-        )}
-
+            <p className="text-[12px] text-muted">
+              {access.enabled
+                ? 'Solo entra quien abra este enlace o escanee este QR (una vez por dispositivo). Los demás ven una página de presentación, sin inicio de sesión.'
+                : 'Actívalo para que solo entre quien tenga el enlace o escanee este QR. Los demás verán una página de presentación, sin inicio de sesión.'}
+            </p>
+          </div>
+        </div>
+        <Switch
+          label="Acceso privado"
+          checked={access.enabled}
+          onChange={(v) => (v ? setConfirmEnable(true) : onSave(false))}
+        />
       </div>
+
+      {access.forcedOff && (
+        <p className="flex items-start gap-2 text-[12px] text-amber-700 dark:text-amber-300">
+          <IconAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Está apagado por la variable <Mono>ACCESS_GATE_DISABLED</Mono> del servidor. Quítala para que vuelva a
+            funcionar.
+          </span>
+        </p>
+      )}
+
+      {access.enabled && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-emerald-500/20 pt-3">
+          <p className="text-[12px] text-muted">¿El enlace llegó a quien no debía? Genera uno nuevo.</p>
+          <button
+            onClick={() => setConfirmRegenerate(true)}
+            disabled={busy}
+            className="btn-ghost h-8 px-3 text-[12px] text-red-600"
+          >
+            <IconRefresh className="h-3.5 w-3.5" />
+            Generar enlace nuevo
+          </button>
+        </div>
+      )}
 
       <ConfirmDialog
         open={confirmEnable}
@@ -962,7 +953,7 @@ function AccessGateCard({
         }}
         onClose={() => setConfirmRegenerate(false)}
       />
-    </Card>
+    </div>
   );
 }
 

@@ -68,7 +68,7 @@ Todas las versiones notables documentadas aquí. Formato basado en [Keep a Chang
 - Se quitaron la pantalla `AdminSettingsPage`, que no se usaba, y la dependencia `archiver`.
 
 ### 🔒 Seguridad
-- **Acceso solo con enlace privado** (Ajustes → Vincular dispositivos, solo Administrador):
+- **Acceso solo con enlace privado** (interruptor en la tarjeta del QR de Ajustes → Vincular dispositivos, solo Administrador):
   - Sin el enlace solo se ve una página de presentación fija de SuperShop (como el panel azul del login); el login, el panel y la API responden "no encontrado".
   - Abrir el enlace (o escanear el QR, que ya lo incluye) autoriza el dispositivo por un año.
   - "Generar enlace nuevo" revoca el anterior.
