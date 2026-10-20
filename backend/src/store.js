@@ -32,40 +32,26 @@ function parseJson(s, fallback) {
 
 export function loadSurveys(q = {}, opts = {}) {
   const limit = opts.limit || Number(q.limit) || 5000;
+  // Parámetros por posición: con Turso (réplica) los parámetros con nombre (@x) no siempre
+  // se envían y la consulta regresa vacía sin marcar error.
   const conditions = [];
-  const params = {};
+  const params = [];
+  const add = (sql, value) => {
+    conditions.push(sql);
+    params.push(value);
+  };
 
-  if (q.from) {
-    conditions.push('created_at >= @from');
-    params.from = dayBound(q.from, 'T00:00:00');
-  }
-  if (q.to) {
-    conditions.push('created_at <= @to');
-    params.to = dayBound(q.to, 'T23:59:59.999');
-  }
-  if (q.branch_id) {
-    conditions.push('branch_id = @branch_id');
-    params.branch_id = Number(q.branch_id);
-  }
-  if (q.register_id) {
-    conditions.push('register_id = @register_id');
-    params.register_id = Number(q.register_id);
-  }
-  if (q.cashier_id) {
-    conditions.push('cashier_id = @cashier_id');
-    params.cashier_id = Number(q.cashier_id);
-  }
-  if (q.rating) {
-    conditions.push('rating = @rating');
-    params.rating = q.rating;
-  }
+  if (q.from) add('created_at >= ?', dayBound(q.from, 'T00:00:00'));
+  if (q.to) add('created_at <= ?', dayBound(q.to, 'T23:59:59.999'));
+  if (q.branch_id) add('branch_id = ?', Number(q.branch_id));
+  if (q.register_id) add('register_id = ?', Number(q.register_id));
+  if (q.cashier_id) add('cashier_id = ?', Number(q.cashier_id));
+  if (q.rating) add('rating = ?', q.rating);
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const rows = db
-    .prepare(
-      `SELECT * FROM surveys ${where} ORDER BY created_at DESC LIMIT @limit`
-    )
-    .all({ ...params, limit });
+    .prepare(`SELECT * FROM surveys ${where} ORDER BY created_at DESC LIMIT ?`)
+    .all(...params, limit);
   return rows.map(mapSurvey);
 }
 
