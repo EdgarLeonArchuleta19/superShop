@@ -1,11 +1,6 @@
 # SuperShop — Sistema de Administración de Tiendas
 
-**SuperShop** es una aplicación de escritorio para Windows (estilo Eleventa) que permite gestionar la administración de tiendas físicas.
-
-- **PC "madre"**: ejecuta la app, aloja la base de datos SQLite local y sirve la API/PWA.
-- **Dispositivos "hijas" (tablets, móviles, otras PCs)**: acceden mediante un túnel seguro Cloudflare (`https://*.trycloudflare.com`) escaneando un código QR. No requieren instalación ni configuración de red.
-
----
+**SuperShop** es una aplicación de escritorio para Windows que permite gestionar la administración de tiendas físicas.
 
 ## Características principales
 
