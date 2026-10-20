@@ -34,6 +34,17 @@ let cache: QueuedSurvey[] | null = null;
 let flushPromise: Promise<FlushResult> | null = null;
 const listeners = new Set<() => void>();
 
+/**
+ * Por qué se detuvo el último envío sin poder reintentarlo solo: 'auth' (sesión vencida o
+ * sin permiso de Mi encuesta) o 'access' (falta el enlace privado). null = sin problema.
+ */
+export type OutboxIssue = 'auth' | 'access' | null;
+let issue: OutboxIssue = null;
+
+export function getOutboxIssue(): OutboxIssue {
+  return issue;
+}
+
 function read(): QueuedSurvey[] {
   if (cache) return cache;
   try {
@@ -175,7 +186,10 @@ async function sendBatches(
         method: 'POST',
         body: { items: batch.map((i) => i.payload) },
         role,
+        // Con señal mala una petición puede quedarse colgada y bloquear todos los envíos.
+        timeoutMs: 20_000,
       });
+      issue = null;
       for (const item of batch) sentUuids.add(item.uuid);
       for (const uuid of res.invalidUuids ?? []) invalidUuids.add(uuid);
     } catch (err) {
@@ -184,6 +198,7 @@ async function sendBatches(
         break;
       }
       if (err instanceof ApiError && (err.status === 401 || err.status === 403 || err.status === 404)) {
+        issue = err.status === 404 ? 'access' : 'auth';
         // Sesión vencida o sin permiso: se conservan en la cola (sin contar intento)
         // y se envían cuando alguien con acceso a "Mi encuesta" vuelva a iniciar sesión.
         // 404: el dispositivo perdió el enlace privado; se envían cuando lo vuelva a abrir.
@@ -241,6 +256,17 @@ export async function flushOutbox(): Promise<FlushResult> {
 
   flushPromise = sendBatches(items, role).finally(() => {
     flushPromise = null;
+    notifyListeners();
   });
+  notifyListeners();
   return flushPromise;
+}
+
+/** ¿Hay un envío en curso? (para mostrar "Enviando…" solo mientras de verdad se envía). */
+export function isSending(): boolean {
+  return flushPromise !== null;
+}
+
+function notifyListeners(): void {
+  for (const fn of listeners) fn();
 }

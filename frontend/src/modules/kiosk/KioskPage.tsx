@@ -5,7 +5,14 @@ import { useAuth } from '../../lib/auth';
 import { useTheme } from '../../lib/theme';
 import { useSettings } from '../../lib/settings';
 import StoreLogo from '../../components/StoreLogo';
-import { enqueueSurvey, flushOutbox, getPendingCount, subscribeOutbox } from '../../lib/offline';
+import {
+  enqueueSurvey,
+  flushOutbox,
+  getOutboxIssue,
+  getPendingCount,
+  isSending,
+  subscribeOutbox,
+} from '../../lib/offline';
 import type { Branch, Cashier, KioskSessionInfo, RatingValue, Register } from '../../lib/types';
 import type { Step } from './kioskTypes';
 import {
@@ -55,6 +62,8 @@ export default function KioskPage() {
   const [selectError, setSelectError] = useState('');
 
   const pending = useSyncExternalStore(subscribeOutbox, getPendingCount);
+  const sending = useSyncExternalStore(subscribeOutbox, isSending);
+  const outboxIssue = useSyncExternalStore(subscribeOutbox, getOutboxIssue);
   const [online, setOnline] = useState(() =>
     typeof navigator === 'undefined' ? true : navigator.onLine
   );
@@ -80,6 +89,14 @@ export default function KioskPage() {
   useEffect(() => {
     flush();
   }, [flush]);
+
+  // Mientras haya encuestas pendientes se reintenta cada 30 s (no solo al terminar otra
+  // encuesta o al volver la conexión).
+  useEffect(() => {
+    if (pending === 0) return;
+    const timer = window.setInterval(flush, 30_000);
+    return () => window.clearInterval(timer);
+  }, [pending, flush]);
 
   // Latido: mantiene viva la sesión del kiosko (expiración deslizante).
   useEffect(() => {
@@ -248,6 +265,16 @@ export default function KioskPage() {
     : '¿Deseas salir de Mi encuesta? Volverás al menú.';
 
   const offlineOpen = !online || pending > 0;
+  // Estado real de la cola: "Enviando" solo mientras de verdad se envía.
+  const outboxText = !online
+    ? `Sin conexión (${pending})`
+    : outboxIssue === 'access'
+      ? `${pending} sin enviar: abre el enlace privado`
+      : outboxIssue === 'auth'
+        ? `${pending} sin enviar: inicia sesión de nuevo`
+        : sending
+          ? `Enviando ${pending}…`
+          : `${pending} por enviar (se reintenta solo)`;
   const subtitle =
     step === 'select' || !session
       ? 'Nueva encuesta'
@@ -271,18 +298,20 @@ export default function KioskPage() {
         <div className="flex items-center gap-2">
           {offlineOpen && (
             <span
-              className={`hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold sm:flex ${
-                !online
+              title={outboxText}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${
+                !online || outboxIssue
                   ? 'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300'
                   : 'bg-faint text-muted'
               }`}
             >
-              {!online ? (
+              {!online || outboxIssue ? (
                 <IconCloudOff className="h-4 w-4" />
               ) : (
-                <IconCloudCheck className="h-4 w-4" />
+                <IconCloudCheck className={`h-4 w-4 ${sending ? 'animate-pulse' : ''}`} />
               )}
-              {!online ? `Sin conexión (${pending})` : `Enviando ${pending}…`}
+              <span className="sm:hidden">{pending}</span>
+              <span className="hidden sm:inline">{outboxText}</span>
             </span>
           )}
           <FailedOutbox />

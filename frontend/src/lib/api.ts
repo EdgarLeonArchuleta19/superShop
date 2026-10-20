@@ -46,21 +46,26 @@ export function clearToken(_role?: TokenRole): void {
 
 export async function api<T>(
   path: string,
-  opts: { method?: string; body?: unknown; role?: TokenRole } = {}
+  opts: { method?: string; body?: unknown; role?: TokenRole; /** Corta la petición (NetError) si tarda más. */ timeoutMs?: number } = {}
 ): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
+  const controller = opts.timeoutMs ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), opts.timeoutMs) : null;
   let res: Response;
   try {
     res = await fetch(path, {
       method: opts.method || 'GET',
       headers,
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      signal: controller?.signal,
     });
   } catch {
     throw new NetError();
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 
   let data: unknown = null;

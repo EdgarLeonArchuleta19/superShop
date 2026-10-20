@@ -88,44 +88,44 @@ function saveBatch(req, res) {
   let accepted = 0;
   let badAccepted = 0;
   const invalidUuids = [];
-  const txn = db.transaction((arr) => {
-    for (const item of arr) {
-      const uuid = typeof item.client_uuid === 'string' ? item.client_uuid.trim() : '';
-      if (!uuid || uuid.length > 64) {
-        invalidUuids.push(item.client_uuid);
-        continue;
-      }
-      const rating = normalizeRating(item.rating);
-      if (!rating) {
-        invalidUuids.push(uuid);
-        continue;
-      }
-      const areas = Array.isArray(item.areas) ? item.areas.filter((a) => validOptions.has(a)) : [];
-      const dislikes = Array.isArray(item.dislikes) ? item.dislikes.filter((a) => validOptions.has(a)) : [];
-      const likes = Array.isArray(item.likes) ? item.likes.filter((a) => validOptions.has(a)) : [];
-      const created = item.created_at || item.client_ts || now();
-      const info = insert.run(
-        uuid,
-        item.branch_id ?? null,
-        lookupName('branch', item.branch_id, item.branch_name),
-        item.register_id ?? null,
-        lookupName('register', item.register_id, item.register_name),
-        item.cashier_id ?? null,
-        lookupName('cashier', item.cashier_id, item.cashier_name),
-        JSON.stringify(areas),
-        JSON.stringify(dislikes),
-        JSON.stringify(likes),
-        rating,
-        created,
-        item.client_ts ?? created
-      );
-      if (info.changes > 0) {
-        accepted++;
-        if (rating === 'bad') badAccepted++;
-      }
+  // Sin transacción: cada encuesta trae su client_uuid y INSERT OR IGNORE no duplica, así
+  // que reenviar un lote a medias da el mismo resultado. Con Turso (réplica) cada escritura
+  // se reenvía a la nube y BEGIN/COMMIT no está garantizado.
+  for (const item of items) {
+    const uuid = typeof item.client_uuid === 'string' ? item.client_uuid.trim() : '';
+    if (!uuid || uuid.length > 64) {
+      invalidUuids.push(item.client_uuid);
+      continue;
     }
-  });
-  txn(items);
+    const rating = normalizeRating(item.rating);
+    if (!rating) {
+      invalidUuids.push(uuid);
+      continue;
+    }
+    const areas = Array.isArray(item.areas) ? item.areas.filter((a) => validOptions.has(a)) : [];
+    const dislikes = Array.isArray(item.dislikes) ? item.dislikes.filter((a) => validOptions.has(a)) : [];
+    const likes = Array.isArray(item.likes) ? item.likes.filter((a) => validOptions.has(a)) : [];
+    const created = item.created_at || item.client_ts || now();
+    const info = insert.run(
+      uuid,
+      item.branch_id ?? null,
+      lookupName('branch', item.branch_id, item.branch_name),
+      item.register_id ?? null,
+      lookupName('register', item.register_id, item.register_name),
+      item.cashier_id ?? null,
+      lookupName('cashier', item.cashier_id, item.cashier_name),
+      JSON.stringify(areas),
+      JSON.stringify(dislikes),
+      JSON.stringify(likes),
+      rating,
+      created,
+      item.client_ts ?? created
+    );
+    if (info.changes > 0) {
+      accepted++;
+      if (rating === 'bad') badAccepted++;
+    }
+  }
   if (badAccepted > 0) notifyBadRatings();
   res.json({
     accepted,

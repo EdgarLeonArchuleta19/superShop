@@ -1,7 +1,14 @@
 import { useState, useSyncExternalStore } from 'react';
 import { Modal, ConfirmDialog } from '../../components/Modal';
 import { IconAlert, IconRefresh, IconTrash } from '../../components/Icons';
-import { clearFailed, getFailedCount, getFailedItems, retryFailed, subscribeOutbox } from '../../lib/offline';
+import {
+  clearFailed,
+  flushOutbox,
+  getFailedCount,
+  getFailedItems,
+  retryFailed,
+  subscribeOutbox,
+} from '../../lib/offline';
 import type { FailedSurvey } from '../../lib/offline';
 
 const REASON_LABEL: Record<FailedSurvey['reason'], string> = {
@@ -58,6 +65,7 @@ export default function FailedOutbox() {
             <button
               onClick={() => {
                 retryFailed();
+                void flushOutbox();
                 setOpen(false);
               }}
               className="btn h-11 bg-brand-600 px-5 text-sm text-white shadow-glow hover:bg-brand-700"

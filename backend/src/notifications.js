@@ -103,20 +103,19 @@ function canSee(userId, id) {
   return !!db.prepare(`SELECT 1 FROM notifications n WHERE n.id = ? AND ${aud.sql}`).get(id, ...aud.params);
 }
 
+/** Sin transacción: con Turso (réplica) BEGIN/COMMIT no está garantizado, y cada fila es independiente. */
 function setState(userId, ids, { read, dismissed }) {
   const t = now();
-  db.transaction(() => {
-    for (const id of ids) {
-      q().upsertState.run(
-        id,
-        userId,
-        read ? t : null,
-        dismissed ? t : null,
-        read === undefined ? 0 : 1,
-        dismissed === undefined ? 0 : 1
-      );
-    }
-  })();
+  for (const id of ids) {
+    q().upsertState.run(
+      id,
+      userId,
+      read ? t : null,
+      dismissed ? t : null,
+      read === undefined ? 0 : 1,
+      dismissed === undefined ? 0 : 1
+    );
+  }
 }
 
 export function markNotification(userId, id, read) {
