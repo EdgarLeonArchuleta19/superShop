@@ -178,6 +178,15 @@ if (fs.existsSync(staticDir)) {
   });
 }
 
+// Errores no controlados: quedan en los logs con la ruta (en Render: Logs) y el cliente
+// recibe { error } como el resto de la API, sin detalles internos.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, _next) => {
+  console.error(`[Error] ${req.method} ${req.path}:`, err);
+  if (res.headersSent) return;
+  res.status(err.status && err.status < 500 ? err.status : 500).json({ error: 'Ocurrió un error en el servidor. Intenta de nuevo.' });
+});
+
 app.disable('x-powered-by');
 
 const httpServer = http.createServer(app);

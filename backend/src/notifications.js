@@ -13,13 +13,15 @@ import { getUserAccess } from './middleware.js';
 const RETENTION_DAYS = 60;
 
 // Se preparan al primer uso: este módulo se carga antes de que db.js cree las tablas.
+// Parámetros por posición: con Turso (réplica) las escrituras se reenvían a la nube y los
+// parámetros con nombre (@x) no siempre se envían bien.
 let stmts = null;
 function q() {
   stmts ??= {
     byKey: db.prepare('SELECT id, updated_at FROM notifications WHERE dedupe_key = ?'),
     insert: db.prepare(
       `INSERT INTO notifications (created_at, updated_at, kind, tone, title, message, link, audience, dedupe_key)
-       VALUES (@t, @t, @kind, @tone, @title, @message, @link, @audience, @dedupeKey)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ),
     update: db.prepare(
       'UPDATE notifications SET tone = ?, title = ?, message = ?, link = ?, updated_at = ? WHERE id = ?'
@@ -30,10 +32,11 @@ function q() {
       'DELETE FROM notification_state WHERE notification_id NOT IN (SELECT id FROM notifications)'
     ),
     upsertState: db.prepare(
-      `INSERT INTO notification_state (notification_id, user_id, read_at, dismissed_at) VALUES (@id, @user, @read, @dismissed)
+      // Los dos últimos parámetros dicen si se cambia read_at / dismissed_at (1) o se deja (0).
+      `INSERT INTO notification_state (notification_id, user_id, read_at, dismissed_at) VALUES (?, ?, ?, ?)
        ON CONFLICT(notification_id, user_id) DO UPDATE SET
-         read_at = CASE WHEN @setRead THEN @read ELSE read_at END,
-         dismissed_at = CASE WHEN @setDismissed THEN @dismissed ELSE dismissed_at END`
+         read_at = CASE WHEN ? THEN excluded.read_at ELSE read_at END,
+         dismissed_at = CASE WHEN ? THEN excluded.dismissed_at ELSE dismissed_at END`
     ),
   };
   return stmts;
@@ -53,7 +56,7 @@ export function notify({ kind, tone = 'info', title, message, link = null, audie
         return existing.id;
       }
     }
-    const id = q().insert.run({ t, kind, tone, title, message, link, audience, dedupeKey }).lastInsertRowid;
+    const id = q().insert.run(t, t, kind, tone, title, message, link, audience, dedupeKey).lastInsertRowid;
     if (Date.now() - lastPrune > 3600 * 1000) {
       lastPrune = Date.now();
       q().prune.run(new Date(Date.now() - RETENTION_DAYS * 24 * 3600 * 1000).toISOString());
@@ -104,14 +107,14 @@ function setState(userId, ids, { read, dismissed }) {
   const t = now();
   db.transaction(() => {
     for (const id of ids) {
-      q().upsertState.run({
+      q().upsertState.run(
         id,
-        user: userId,
-        read: read === undefined ? null : read ? t : null,
-        dismissed: dismissed ? t : null,
-        setRead: read === undefined ? 0 : 1,
-        setDismissed: dismissed === undefined ? 0 : 1,
-      });
+        userId,
+        read ? t : null,
+        dismissed ? t : null,
+        read === undefined ? 0 : 1,
+        dismissed === undefined ? 0 : 1
+      );
     }
   })();
 }

@@ -95,8 +95,10 @@ function q() {
   stmts ??= {
     get: db.prepare('SELECT * FROM login_failures WHERE key = ?'),
     upsert: db.prepare(
-      `INSERT INTO login_failures (key, count, last_at, locked_until) VALUES (@key, @count, @last_at, @locked_until)
-       ON CONFLICT(key) DO UPDATE SET count = @count, last_at = @last_at, locked_until = @locked_until`
+      // Parámetros por posición: con Turso (réplica) las escrituras se reenvían a la nube y
+      // los parámetros con nombre (@x) no siempre se envían bien.
+      `INSERT INTO login_failures (key, count, last_at, locked_until) VALUES (?, ?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET count = excluded.count, last_at = excluded.last_at, locked_until = excluded.locked_until`
     ),
     clear: db.prepare('DELETE FROM login_failures WHERE key = ?'),
     active: db.prepare('SELECT * FROM login_failures WHERE locked_until > ? ORDER BY locked_until DESC'),
@@ -122,7 +124,7 @@ function lockMs(count, threshold) {
 }
 
 /** Milisegundos que faltan para poder intentar de nuevo (0 si no hay bloqueo). */
-export function loginLockRemaining(username, ip) {
+function loginLockRemainingUnsafe(username, ip) {
   const t = Date.now();
   let remaining = 0;
   for (const key of [accountKey(username), ipKey(ip)]) {
@@ -132,7 +134,7 @@ export function loginLockRemaining(username, ip) {
   return Math.max(0, remaining);
 }
 
-export function recordLoginFailure(username, ip) {
+function recordLoginFailureUnsafe(username, ip) {
   const t = Date.now();
   for (const [key, threshold] of [
     [accountKey(username), ACCOUNT_THRESHOLD],
@@ -142,12 +144,7 @@ export function recordLoginFailure(username, ip) {
     const fresh = !row || t - new Date(row.last_at).getTime() > FAILURE_WINDOW_MS;
     const count = fresh ? 1 : row.count + 1;
     const ms = lockMs(count, threshold);
-    q().upsert.run({
-      key,
-      count,
-      last_at: new Date(t).toISOString(),
-      locked_until: ms ? new Date(t + ms).toISOString() : null,
-    });
+    q().upsert.run(key, count, new Date(t).toISOString(), ms ? new Date(t + ms).toISOString() : null);
     if (ms) notifyLock(key, count, ms);
   }
 }
@@ -188,7 +185,7 @@ function notifyFailedLogins() {
   });
 }
 
-export function clearLoginFailures(username, ip) {
+function clearLoginFailuresUnsafe(username, ip) {
   q().clear.run(accountKey(username));
   q().clear.run(ipKey(ip));
 }
@@ -212,7 +209,7 @@ export function unlock(key) {
 let lastPrune = 0;
 
 /** Guarda un intento de inicio de sesión (exitoso o no) en el registro de accesos. */
-export function logLogin(req, { username, userId = null, success, reason }) {
+function logLoginUnsafe(req, { username, userId = null, success, reason }) {
   q().log.run(
     now(),
     String(username || '').trim().slice(0, 80),
@@ -232,3 +229,23 @@ export function logLogin(req, { username, userId = null, success, reason }) {
     q().pruneFailures.run(stale, now());
   }
 }
+
+/**
+ * El registro de intentos nunca debe impedir iniciar sesión: si la base falla, se anota en
+ * los logs del servidor y el login sigue (sin bloqueo por intentos en ese momento).
+ */
+function safe(name, fn, fallback) {
+  return (...args) => {
+    try {
+      return fn(...args);
+    } catch (e) {
+      console.error(`[Seguridad] ${name} falló:`, e);
+      return fallback;
+    }
+  };
+}
+
+export const loginLockRemaining = safe('loginLockRemaining', loginLockRemainingUnsafe, 0);
+export const recordLoginFailure = safe('recordLoginFailure', recordLoginFailureUnsafe);
+export const clearLoginFailures = safe('clearLoginFailures', clearLoginFailuresUnsafe);
+export const logLogin = safe('logLogin', logLoginUnsafe);
