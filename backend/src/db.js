@@ -42,14 +42,16 @@ function openDatabase() {
 export const db = await openDatabase();
 if (CLOUD && typeof db.sync === 'function' && !process.env.TURSO_DATABASE_URL.startsWith('file:')) {
   db.sync();
-  // Otra instancia o una restauración en Turso pudo cambiar datos: se trae lo nuevo cada minuto.
+  // Lo que escribe este servidor se ve al instante; esto solo trae cambios hechos por fuera
+  // (otra instancia o una restauración en Turso). Cada 5 min: cada sincronización cuenta
+  // para el límite mensual de Turso (3 GB en el plan gratis).
   setInterval(() => {
     try {
       db.sync();
     } catch (e) {
       console.warn('[Turso] No se pudo sincronizar:', e.message);
     }
-  }, 60 * 1000).unref();
+  }, 5 * 60 * 1000).unref();
 } else if (!CLOUD) {
   db.pragma('journal_mode = WAL');
 }
