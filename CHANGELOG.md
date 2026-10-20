@@ -49,6 +49,11 @@ Todas las versiones notables documentadas aquí. Formato basado en [Keep a Chang
 - Información de la tienda: sin logo se muestran las iniciales de la tienda (también en el kiosko y en el PDF), con vista previa de cómo se verá en los reportes.
 
 ### 🐛 Corregido
+- **Se perdían las encuestas en las que no tocaban ninguna carita**: a los 5 segundos el kiosko las envía sin calificación y el servidor las rechazaba como inválidas.
+  - Ahora se guardan como **"Sin respuesta"**: en la base `rating = 'none'`, y la API la entrega como `null`.
+  - Se muestran así en Respuestas, en la gráfica de caritas (porción gris) y en Excel/PDF.
+  - Las que quedaron como fallidas en los kioskos vuelven solas a la cola y se envían.
+- **Versión web (Turso):** Respuestas y Estadísticas salían vacías y el login daba error 500. Las consultas con parámetros con nombre (`@x`) no funcionan con la réplica de Turso; ahora usan `?`.
 - **Las encuestas de hoy no aparecían en Encuestas ni en Estadísticas**: el filtro "hasta" mandaba solo la fecha (`2026-10-19`) y se comparaba contra `created_at` en ISO UTC, así que todo ese día quedaba fuera. Ahora el frontend manda el inicio y fin del día en la zona del navegador, y el backend convierte las fechas sueltas al inicio o fin del día.
 - **La sesión ya no se cierra sola**: se quitó el cierre por 30 minutos de inactividad del panel y la sesión dura 90 días (`SESSION_TTL_HOURS=2160`), renovándose cada día que se usa. Solo se cierra con "Cerrar sesión", al cambiar la contraseña o tras 90 días sin abrir la app.
 - Móvil: los campos ya no hacen zoom al escribir (letra de 16px en pantallas táctiles) y los modales se muestran centrados en lugar de pegados abajo.
