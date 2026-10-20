@@ -7,6 +7,8 @@ import { Modal, Spinner } from '../../components/Modal';
 import Select from '../../components/Select';
 import { IconAlert, IconCheck, IconTablet } from '../../components/Icons';
 import { SURVEY_ICON } from '../../components/StoreLogo';
+import { PUBLIC_URL } from '../../lib/domain';
+import { useSettings } from '../../lib/settings';
 
 /*
  * Vincular dispositivos → "SuperShop Survey" (QR). La lista de tablets está en Registro de accesos.
@@ -15,7 +17,7 @@ import { SURVEY_ICON } from '../../components/StoreLogo';
  * (como WhatsApp Web). Ver backend/src/routes/devices.js.
  */
 
-/** Dirección con la que la tablet llega a SuperShop (internet, red local…). */
+/** Dirección de esta computadora en la red de la tienda (QR en la app de escritorio). */
 export interface PairingAddress {
   label: string;
   url: string;
@@ -168,16 +170,69 @@ function PlaceFields({
   );
 }
 
+/**
+ * Hacia dónde apuntan los QR (SuperShop y SuperShop Survey):
+ * - Versión web: el dominio fijo de SuperShop (lib/domain.ts), porque está en internet.
+ * - App de escritorio: la IP de esta computadora en la red de la tienda (http, sin
+ *   certificado), porque está pensada para funcionar en el wifi de la tienda.
+ */
+export function useQrTarget(localAddresses: PairingAddress[]) {
+  const cloud = !!useSettings().settings.cloud;
+  const [index, setIndex] = useState(0);
+  const localAddress = localAddresses[Math.min(index, localAddresses.length - 1)] ?? null;
+  const url = cloud ? PUBLIC_URL : (localAddress?.url ?? null);
+  return { cloud, url, index, setIndex, localAddresses };
+}
+
+/** Escritorio: aviso de red local y, si la computadora tiene varias IP, cuál usar. */
+export function QrAddressPicker({ target }: { target: ReturnType<typeof useQrTarget> }) {
+  const { cloud, localAddresses, index, setIndex } = target;
+  if (cloud || localAddresses.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-muted">
+      <span>Funciona con los equipos conectados al wifi de la tienda.</span>
+      {localAddresses.length > 1 && (
+        <>
+          <span>¿No abre? Prueba:</span>
+          {localAddresses.map((a, i) => (
+            <button
+              key={a.url}
+              onClick={() => setIndex(i)}
+              className={`rounded-full px-2.5 py-1 font-semibold ${
+                i === Math.min(index, localAddresses.length - 1)
+                  ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
+                  : 'bg-faint text-ink/70 hover:text-ink'
+              }`}
+            >
+              {a.label}
+            </button>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Escritorio sin red local: no hay dirección para el QR. */
+export function NoNetworkNotice() {
+  return (
+    <div className="flex items-start gap-2.5 rounded-xl bg-faint px-3.5 py-3 text-[13px] text-muted">
+      <IconAlert className="mt-0.5 h-4 w-4 shrink-0" />
+      <p>Conecta esta computadora al wifi o módem de la tienda para generar el código.</p>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // QR de "SuperShop Survey"
 // ---------------------------------------------------------------------------
 
 export function SurveyPairingCard({
-  addresses,
+  localAddresses,
   accessKey,
   onPaired,
 }: {
-  addresses: PairingAddress[];
+  localAddresses: PairingAddress[];
   accessKey: string | null;
   onPaired?: () => void;
 }) {
@@ -185,7 +240,7 @@ export function SurveyPairingCard({
   const [branchId, setBranchId] = useState('');
   const [registerId, setRegisterId] = useState('');
   const [name, setName] = useState('');
-  const [addressIndex, setAddressIndex] = useState(0);
+  const target = useQrTarget(localAddresses);
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [renewals, setRenewals] = useState(0);
   const [stalled, setStalled] = useState(false);
@@ -194,8 +249,6 @@ export function SurveyPairingCard({
   const [now, setNow] = useState(() => Date.now());
   const request = useRef({ branchId, registerId, name });
   const renewing = useRef(false);
-
-  const address = addresses[Math.min(addressIndex, addresses.length - 1)] ?? null;
 
   const generate = useCallback(async () => {
     const { branchId: b, registerId: r, name: n } = request.current;
@@ -277,7 +330,7 @@ export function SurveyPairingCard({
   }, [pairing, renewals, generate, onPaired, toast]);
 
   const remainingS = pairing ? Math.max(0, Math.ceil((pairing.localExpires - now) / 1000)) : 0;
-  const link = pairing && address ? pairingLink(address.url, pairing.code, accessKey) : null;
+  const link = pairing && target.url ? pairingLink(target.url, pairing.code, accessKey) : null;
 
   return (
     <section className="card p-5">
@@ -291,14 +344,8 @@ export function SurveyPairingCard({
         </div>
       </div>
 
-      {addresses.length === 0 ? (
-        <div className="flex items-start gap-2.5 rounded-xl bg-faint px-3.5 py-3 text-[13px] text-muted">
-          <IconAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>
-            Para vincular tablets, primero conecta esta computadora a la red de la tienda o configura la dirección por
-            internet (abajo).
-          </p>
-        </div>
+      {!target.url ? (
+        <NoNetworkNotice />
       ) : pairing && link ? (
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
           <div className="rounded-2xl bg-white p-2 ring-1 ring-line">
@@ -323,24 +370,6 @@ export function SurveyPairingCard({
               Esperando que lo escaneen… el código se renueva en {Math.floor(remainingS / 60)}:
               {String(remainingS % 60).padStart(2, '0')}
             </p>
-            {addresses.length > 1 && (
-              <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-muted">
-                <span>¿La tablet no abre el enlace? Usa:</span>
-                {addresses.map((a, i) => (
-                  <button
-                    key={a.url}
-                    onClick={() => setAddressIndex(i)}
-                    className={`rounded-full px-2.5 py-1 font-semibold ${
-                      a.url === address?.url
-                        ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
-                        : 'bg-faint text-ink/70 hover:text-ink'
-                    }`}
-                  >
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-            )}
             <button onClick={cancel} className="btn-ghost h-9 px-3.5 text-[13px]">
               Cancelar
             </button>
@@ -386,6 +415,7 @@ export function SurveyPairingCard({
           </div>
         </div>
       )}
+      <QrAddressPicker target={target} />
     </section>
   );
 }

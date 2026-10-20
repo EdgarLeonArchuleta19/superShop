@@ -31,6 +31,12 @@ Todas las versiones notables documentadas aquí. Formato basado en [Keep a Chang
   - Con el acceso por enlace privado activo, las tablets siguen entrando aunque se genere un enlace nuevo.
 - Una tablet desvinculada todavía entrega, durante 3 días, las encuestas que respondió antes de desvincularla.
 - Menú de Ajustes: Vincular dispositivos pasa al 4.º lugar e Información al final.
+- **Vincular dispositivos simplificada:** solo dos tarjetas, **SuperShop Survey** (tablets) y **SuperShop** (equipos de administración).
+  - **Dirección de los QR, sin opciones que configurar:**
+    - **Versión web:** los dos QR y el enlace privado usan el dominio fijo `https://app.supershop-mx.com`.
+    - **App de escritorio:** usan la IP de la computadora en el wifi de la tienda, por http para que abran sin instalar certificados.
+  - **SuperShop:** además tiene acceso privado o público.
+  - **Se quitaron** la configuración de dominio, la "Conexión temporal por internet" (ya no se inicia sola al arrancar) y los pasos largos de red local y certificado.
 - **Notificaciones rediseñadas**: se guardan en el servidor y cada usuario tiene su propio estado de leída o borrada.
   - **Acciones:** marcar como leída o no leída, "Marcar todas", borrar una o todas las leídas y filtrar "No leídas". Tocar una notificación abre la pantalla relacionada.
   - **Contador:** se ve en la campana y en la pestaña del navegador.

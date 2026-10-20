@@ -122,7 +122,10 @@ No hay suite de tests automatizados. Para validar un cambio: `npm run typecheck`
 
 - `backend/src/tunnel.js` maneja dos modos:
   - **fijo**: túnel con nombre de la cuenta de Cloudflare de la tienda; se usa `cloudflared tunnel run` con `TUNNEL_TOKEN` en el entorno, nunca en los argumentos.
-  - **temporal**: `trycloudflare.com`.
+  - **temporal**: `trycloudflare.com`. Ya no tiene pantalla ni se inicia sola al arrancar.
+- Vincular dispositivos no configura túneles. Los QR (SuperShop y Survey) los resuelve `useQrTarget` en `DevicesSection.tsx`:
+  - **Web (`settings.cloud`):** el dominio fijo `PUBLIC_URL` de `frontend/src/lib/domain.ts` (`https://app.supershop-mx.com`).
+  - **Escritorio:** la IP http de la computadora en la red local.
 - El túnel fijo arranca siempre con el servidor y se relanza solo si se cae, esperando entre 5 y 60 segundos. Deja de reintentar si Cloudflare no reconoce el túnel ("Failed to get tunnel").
 - La dirección pública y el token se guardan en `settings` (`tunnel_mode`, `tunnel_token`, `tunnel_hostname`). El token nunca se devuelve a la pantalla y se borra de los respaldos.
 - La ruta en Cloudflare debe apuntar a `http://localhost:<PORT>`.

@@ -46,7 +46,9 @@ export function bootTunnelConfig() {
   if (s.tunnel_mode === 'fixed' && s.tunnel_token && s.tunnel_hostname) {
     return { mode: 'fixed', token: s.tunnel_token, hostname: s.tunnel_hostname };
   }
-  return s.tunnel_autostart ? { mode: 'quick' } : null;
+  // La conexión temporal (trycloudflare) ya no tiene pantalla: no se inicia sola aunque
+  // una instalación anterior tenga tunnel_autostart activo.
+  return null;
 }
 
 function currentConfig() {
