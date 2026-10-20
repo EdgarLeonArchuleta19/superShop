@@ -19,7 +19,7 @@ export default function PageSizeSelect({
         onChange={(v) => onChange(Number(v))}
         options={PAGE_SIZES.map((n) => ({ value: String(n), label: String(n) }))}
       />
-      <span className="hidden text-[13px] sm:inline">por página</span>
+      <span className="hidden whitespace-nowrap text-[13px] sm:inline">por página</span>
     </div>
   );
 }

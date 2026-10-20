@@ -3,75 +3,77 @@ import { db } from './db.js';
 export function mapSurvey(row) {
   if (!row) return row;
   return {
-    ...row,
-    areas: parseArr(row.areas),
-    dislikes: parseArr(row.dislikes),
-    likes: parseArr(row.likes),
+    id: row.id,
+    client_uuid: row.client_uuid,
+    branch_id: row.branch_id,
+    branch_name: row.branch_name,
+    register_id: row.register_id,
+    register_name: row.register_name,
+    cashier_id: row.cashier_id,
+    cashier_name: row.cashier_name,
+    areas: parseJson(row.areas, []),
+    dislikes: parseJson(row.dislikes, []),
+    likes: parseJson(row.likes, []),
+    rating: row.rating,
+    created_at: row.created_at,
+    client_ts: row.client_ts,
   };
 }
 
-function parseArr(value) {
+function parseJson(s, fallback) {
+  if (!s) return fallback;
   try {
-    const v = JSON.parse(value);
-    return Array.isArray(v) ? v : [];
+    const v = JSON.parse(s);
+    return Array.isArray(v) ? v : fallback;
   } catch {
-    return [];
+    return fallback;
   }
+}
+
+export function loadSurveys(q = {}, opts = {}) {
+  const limit = opts.limit || Number(q.limit) || 5000;
+  const conditions = [];
+  const params = {};
+
+  if (q.from) {
+    conditions.push('created_at >= @from');
+    params.from = q.from;
+  }
+  if (q.to) {
+    conditions.push('created_at <= @to');
+    params.to = q.to;
+  }
+  if (q.branch_id) {
+    conditions.push('branch_id = @branch_id');
+    params.branch_id = Number(q.branch_id);
+  }
+  if (q.register_id) {
+    conditions.push('register_id = @register_id');
+    params.register_id = Number(q.register_id);
+  }
+  if (q.cashier_id) {
+    conditions.push('cashier_id = @cashier_id');
+    params.cashier_id = Number(q.cashier_id);
+  }
+  if (q.rating) {
+    conditions.push('rating = @rating');
+    params.rating = q.rating;
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const rows = db
+    .prepare(
+      `SELECT * FROM surveys ${where} ORDER BY created_at DESC LIMIT @limit`
+    )
+    .all({ ...params, limit });
+  return rows.map(mapSurvey);
 }
 
 export function localDate(iso) {
-  const d = iso ? new Date(iso) : new Date();
-  if (Number.isNaN(d.getTime())) return '';
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
-function buildIdFilter(query = {}) {
-  const where = [];
-  const params = [];
-
-  const branchId = intOrNull(query.branch_id);
-  if (branchId) {
-    where.push('branch_id = ?');
-    params.push(branchId);
-  }
-  const registerId = intOrNull(query.register_id);
-  if (registerId) {
-    where.push('register_id = ?');
-    params.push(registerId);
-  }
-  const cashierId = intOrNull(query.cashier_id);
-  if (cashierId) {
-    where.push('cashier_id = ?');
-    params.push(cashierId);
-  }
-  return { where, params };
-}
-
-export function loadSurveys(query = {}, { limit = 1000 } = {}) {
-  const { where, params } = buildIdFilter(query);
-  let rows = db
-    .prepare(
-      `SELECT * FROM surveys ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY created_at DESC, id DESC`
-    )
-    .all(...params);
-
-  const from = query.from ? String(query.from).slice(0, 10) : '';
-  const to = query.to ? String(query.to).slice(0, 10) : '';
-  if (from || to) {
-    rows = rows.filter((r) => {
-      const day = localDate(r.created_at);
-      if (from && day < from) return false;
-      if (to && day > to) return false;
-      return true;
-    });
-  }
-
-  const max = Math.min(Number(query.limit) || limit, 5000);
-  return rows.slice(0, max).map(mapSurvey);
-}
-
-function intOrNull(value) {
-  const n = Number(value);
-  return Number.isInteger(n) && n > 0 ? n : null;
+  if (!iso) return '';
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }

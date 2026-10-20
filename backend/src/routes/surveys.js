@@ -1,111 +1,111 @@
 import { Router } from 'express';
 import { db, now } from '../db.js';
 import { questions } from '../questions.js';
-import { getSession } from '../middleware.js';
+import { getSession, requirePermission } from '../middleware.js';
 
 const router = Router();
 
 const validOptions = new Set();
 for (const q of questions.questions) for (const o of q.options) validOptions.add(o);
 
-router.post('/surveys/batch', (req, res) => {
-  const items = req.body?.items;
-  if (!Array.isArray(items)) return res.status(400).json({ error: 'Formato inválido' });
-  if (items.length > 200) return res.status(400).json({ error: 'Lote demasiado grande' });
+function normalizeRating(value) {
+  if (value === 'good' || value === 'regular' || value === 'bad') return value;
+  const n = Number(value);
+  if (n >= 4) return 'good';
+  if (n === 3) return 'regular';
+  if (n >= 1 && n <= 2) return 'bad';
+  return null;
+}
 
-  const session = getSession(req);
-  const branchCache = new Map();
-  const registerCache = new Map();
-  const cashierCache = new Map();
+const MAX_BATCH = 200;
 
-  const lookup = (cache, table, id) => {
-    if (!id) return null;
-    if (!cache.has(id)) {
-      cache.set(id, db.prepare(`SELECT id, name FROM ${table} WHERE id = ?`).get(id) || null);
-    }
-    return cache.get(id);
-  };
+// Se preparan al primer uso: este módulo se carga antes de que db.js cree las tablas.
+const NAME_TABLES = { branch: 'branches', register: 'registers', cashier: 'cashiers' };
+const nameStatements = {};
 
-  const insert = db.prepare(`
-    INSERT OR IGNORE INTO surveys
-      (client_uuid, session_id, branch_id, branch_name, register_id, register_name,
-       cashier_id, cashier_name, areas, dislikes, likes, rating, created_at, client_ts)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+/** El kiosko manda solo los ids; el nombre se guarda tal como estaba al responder. */
+function lookupName(kind, id, given) {
+  if (given) return given;
+  if (id == null) return null;
+  nameStatements[kind] ??= db.prepare(`SELECT name FROM ${NAME_TABLES[kind]} WHERE id = ?`);
+  return nameStatements[kind].get(Number(id))?.name ?? null;
+}
 
-  let inserted = 0;
-  let duplicates = 0;
-  let invalid = 0;
+/**
+ * Recibe encuestas del kiosko en lotes (también las que se guardaron sin conexión y se
+ * envían al volver la red). Cada una trae un client_uuid: si ya se recibió, se ignora,
+ * así que reenviar un lote nunca duplica datos.
+ */
+function saveBatch(req, res) {
+  const { items } = req.body || {};
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'No hay encuestas para enviar' });
+  }
+  if (items.length > MAX_BATCH) {
+    return res.status(400).json({ error: `Máximo ${MAX_BATCH} encuestas por envío` });
+  }
 
-  const run = db.transaction(() => {
-    for (const raw of items) {
-      const item = raw && typeof raw === 'object' ? raw : {};
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO surveys (client_uuid, branch_id, branch_name, register_id, register_name, cashier_id, cashier_name, areas, dislikes, likes, rating, created_at, client_ts)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+
+  let accepted = 0;
+  const invalidUuids = [];
+  const txn = db.transaction((arr) => {
+    for (const item of arr) {
       const uuid = typeof item.client_uuid === 'string' ? item.client_uuid.trim() : '';
-      const rating = Number(item.rating);
-      const areas = cleanList(item.areas);
-      const dislikes = cleanList(item.dislikes);
-      const likes = cleanList(item.likes);
-
-      if (
-        uuid.length < 8 ||
-        uuid.length > 80 ||
-        !Number.isInteger(rating) ||
-        rating < 1 ||
-        rating > 5 ||
-        !areas.length ||
-        !dislikes.length ||
-        !likes.length
-      ) {
-        invalid++;
+      if (!uuid || uuid.length > 64) {
+        invalidUuids.push(item.client_uuid);
         continue;
       }
-
-      const branchId = positiveId(item.branch_id) || session?.branch_id || null;
-      const registerId = positiveId(item.register_id) || session?.register_id || null;
-      const cashierId = positiveId(item.cashier_id) || session?.cashier_id || null;
-
-      const branch = lookup(branchCache, 'branches', branchId);
-      const register = lookup(registerCache, 'registers', registerId);
-      const cashier = lookup(cashierCache, 'cashiers', cashierId);
-
+      const rating = normalizeRating(item.rating);
+      if (!rating) {
+        invalidUuids.push(uuid);
+        continue;
+      }
+      const areas = Array.isArray(item.areas) ? item.areas.filter((a) => validOptions.has(a)) : [];
+      const dislikes = Array.isArray(item.dislikes) ? item.dislikes.filter((a) => validOptions.has(a)) : [];
+      const likes = Array.isArray(item.likes) ? item.likes.filter((a) => validOptions.has(a)) : [];
+      const created = item.created_at || item.client_ts || now();
       const info = insert.run(
         uuid,
-        session?.id ?? null,
-        branch?.id ?? branchId ?? null,
-        branch?.name ?? null,
-        register?.id ?? registerId ?? null,
-        register?.name ?? null,
-        cashier?.id ?? cashierId ?? null,
-        cashier?.name ?? null,
+        item.branch_id ?? null,
+        lookupName('branch', item.branch_id, item.branch_name),
+        item.register_id ?? null,
+        lookupName('register', item.register_id, item.register_name),
+        item.cashier_id ?? null,
+        lookupName('cashier', item.cashier_id, item.cashier_name),
         JSON.stringify(areas),
         JSON.stringify(dislikes),
         JSON.stringify(likes),
         rating,
-        now(),
-        typeof item.client_ts === 'string' ? item.client_ts.slice(0, 40) : null
+        created,
+        item.client_ts ?? created
       );
-      if (info.changes > 0) inserted++;
-      else duplicates++;
+      if (info.changes > 0) accepted++;
     }
   });
+  txn(items);
+  res.json({
+    accepted,
+    duplicates: items.length - accepted - invalidUuids.length,
+    invalid: invalidUuids.length,
+    invalidUuids,
+  });
+}
 
-  run();
-  res.json({ inserted, duplicates, invalid });
+// Solo usuarios con sesión y acceso a "Mi encuesta" pueden enviar encuestas (con la
+// dirección pública, si no, cualquiera podría llenar la base de respuestas falsas).
+// /surveys/batch es la que usa el kiosko (tiene su propio límite de solicitudes).
+router.post('/surveys', requirePermission('surveys.kiosk'), saveBatch);
+router.post('/surveys/batch', requirePermission('surveys.kiosk'), saveBatch);
+
+router.get('/surveys/last', (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  const session = getSession(token);
+  const row = db.prepare('SELECT created_at FROM surveys ORDER BY created_at DESC LIMIT 1').get();
+  res.json({ last_at: row?.created_at ?? null, session_valid: !!session });
 });
-
-function cleanList(value) {
-  if (!Array.isArray(value)) return [];
-  const out = [];
-  for (const v of value.slice(0, 8)) {
-    const label = String(v ?? '').trim().slice(0, 60);
-    if (label && validOptions.has(label) && !out.includes(label)) out.push(label);
-  }
-  return out;
-}
-
-function positiveId(value) {
-  const n = Number(value);
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
 
 export default router;

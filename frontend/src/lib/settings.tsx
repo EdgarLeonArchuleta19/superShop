@@ -4,14 +4,14 @@ import { api } from './api';
 
 export interface StoreSettings {
   store_name: string;
-  store_tagline: string;
   store_logo: string | null;
   updated_at?: string | null;
+  /** Versión web (Turso): no existen respaldos en carpeta, túnel ni red local. */
+  cloud?: boolean;
 }
 
 const FALLBACK: StoreSettings = {
-  store_name: 'Super Nallely',
-  store_tagline: 'Administración de tiendas',
+  store_name: 'Mi Tienda',
   store_logo: null,
 };
 
@@ -20,7 +20,8 @@ const CACHE_KEY = 'nallely.settings';
 interface SettingsContextValue {
   settings: StoreSettings;
   ready: boolean;
-  logo: string;
+  /** Logo subido por la tienda, o null (usar <StoreLogo>, que muestra las iniciales). */
+  logo: string | null;
   save: (next: Partial<StoreSettings>) => Promise<StoreSettings>;
 }
 
@@ -65,8 +66,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    document.title = `${settings.store_name} · ${settings.store_tagline}`;
-  }, [settings.store_name, settings.store_tagline]);
+    document.title = settings.store_name;
+  }, [settings.store_name]);
 
   const save = useCallback(async (next: Partial<StoreSettings>) => {
     const res = await api<{ settings: StoreSettings }>('/api/admin/settings', {
@@ -83,7 +84,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     () => ({
       settings,
       ready,
-      logo: settings.store_logo || '/logo-tienda.jpg',
+      logo: settings.store_logo || null,
       save,
     }),
     [settings, ready, save]

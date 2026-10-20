@@ -1,0 +1,45 @@
+{
+  "name": "supershop-app",
+  "version": "1.0.0",
+  "main": "main.cjs",
+  "type": "commonjs",
+  "author": "ELAN Software",
+  "description": "SuperShop - Sistema de gestión de satisfacción del cliente",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "build": "electron-builder",
+    "dist": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.elansoftware.supershop",
+    "productName": "SuperShop",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "package.json",
+      { "from": "../backend", "to": "backend", "filter": ["**/*"] },
+      { "from": "../frontend/dist", "to": "frontend/dist", "filter": ["**/*"] }
+    ],
+    "extraResources": [],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "../frontend/assets/logo-tienda.jpg",
+      "artifactName": "SuperShop-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

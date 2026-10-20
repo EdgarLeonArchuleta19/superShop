@@ -1,10 +1,9 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { db } from '../db.js';
-import { requireAuth, closeUserSessions } from '../middleware.js';
+import { db, now } from '../db.js';
+import { requireAuth, requirePermission, closeUserSessions } from '../middleware.js';
 
 const router = Router();
-router.use(requireAuth('admin'));
 
 function bad(res, status, message) {
   return res.status(status).json({ error: message });
@@ -48,13 +47,16 @@ const tables = {
 function makeCrud(kind) {
   const cfg = tables[kind];
   const r = Router();
+  // Leer el catálogo lo necesita cualquier usuario (filtros de estadísticas y respuestas);
+  // modificarlo requiere el permiso de esa pantalla.
+  const canEdit = requirePermission(`catalog.${kind}`);
 
-  r.get(`/${kind}`, (_req, res) => {
+  r.get(`/${kind}`, requireAuth(), (_req, res) => {
     const items = db.prepare(cfg.listSql).all().map((row) => ({ ...row, ...cfg.extra(row) }));
     res.json({ items });
   });
 
-  r.post(`/${kind}`, (req, res) => {
+  r.post(`/${kind}`, canEdit, (req, res) => {
     const name = cleanName(req.body?.name);
     if (!name) return bad(res, 400, 'Escribe un nombre');
 
@@ -65,20 +67,20 @@ function makeCrud(kind) {
       const dup = db.prepare(cfg.dupeSql).get(branchId, name, -1);
       if (dup) return bad(res, 409, 'Ya existe una entrada con ese nombre en esa sucursal');
       const info = db
-        .prepare(`INSERT INTO ${cfg.table} (branch_id, name) VALUES (?, ?)`)
-        .run(branchId, name);
+        .prepare(`INSERT INTO ${cfg.table} (branch_id, name, created_at) VALUES (?, ?, ?)`)
+        .run(branchId, name, now());
       const row = db.prepare(`SELECT * FROM ${cfg.table} WHERE id = ?`).get(info.lastInsertRowid);
       return res.status(201).json({ item: { ...row, ...cfg.extra(row) } });
     }
 
     const dup = db.prepare(cfg.dupeSql).get(name, -1);
     if (dup) return bad(res, 409, 'Ya existe una sucursal con ese nombre');
-    const info = db.prepare(`INSERT INTO ${cfg.table} (name) VALUES (?)`).run(name);
+    const info = db.prepare(`INSERT INTO ${cfg.table} (name, created_at) VALUES (?, ?)`).run(name, now());
     const row = db.prepare(`SELECT * FROM ${cfg.table} WHERE id = ?`).get(info.lastInsertRowid);
     return res.status(201).json({ item: { ...row, ...cfg.extra(row) } });
   });
 
-  r.put(`/${kind}/:id`, (req, res) => {
+  r.put(`/${kind}/:id`, canEdit, (req, res) => {
     const id = Number(req.params.id);
     const row = db.prepare(`SELECT * FROM ${cfg.table} WHERE id = ?`).get(id);
     if (!row) return bad(res, 404, 'No encontrado');
@@ -119,13 +121,14 @@ function makeCrud(kind) {
     }
     if (!updates.length) return bad(res, 400, 'Nada que actualizar');
 
-    params.push(id);
+    updates.push('updated_at = ?');
+    params.push(now(), id);
     db.prepare(`UPDATE ${cfg.table} SET ${updates.join(', ')} WHERE id = ?`).run(...params);
     const updated = db.prepare(`SELECT * FROM ${cfg.table} WHERE id = ?`).get(id);
     res.json({ item: { ...updated, ...cfg.extra(updated) } });
   });
 
-  r.delete(`/${kind}/:id`, (req, res) => {
+  r.delete(`/${kind}/:id`, canEdit, (req, res) => {
     const id = Number(req.params.id);
     const row = db.prepare(`SELECT * FROM ${cfg.table} WHERE id = ?`).get(id);
     if (!row) return bad(res, 404, 'No encontrado');
@@ -140,7 +143,7 @@ router.use(makeCrud('branches'));
 router.use(makeCrud('registers'));
 router.use(makeCrud('cashiers'));
 
-router.put('/password', (req, res) => {
+router.put('/password', requireAuth(), (req, res) => {
   const { current_password, new_password } = req.body || {};
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.user_id);
   if (!user) return bad(res, 404, 'Usuario no encontrado');
@@ -155,68 +158,95 @@ router.put('/password', (req, res) => {
     bcrypt.hashSync(String(new_password), 10),
     user.id
   );
-  closeUserSessions(user.id, { exceptToken: req.session.token, reason: 'password_change' });
+  closeUserSessions(user.id);
   res.json({ ok: true });
 });
 
-const ROLES = ['admin', 'cashier'];
+const canManageUsers = requirePermission('settings.users');
 
-function cleanEmail(value) {
-  return String(value ?? '').trim().toLowerCase().slice(0, 120);
+function cleanUsername(value) {
+  return String(value ?? '').trim().toLowerCase().replace(/\s+/g, '').slice(0, 40);
 }
 
 function mapUser(row) {
   return {
     id: row.id,
-    email: row.email,
+    username: row.username,
     name: row.name,
     role: row.role,
+    role_id: row.role_id,
+    role_name: row.role_name || 'Sin rol',
     active: row.active,
     created_at: row.created_at,
   };
 }
 
-router.get('/users', (_req, res) => {
+const USER_SQL = `
+  SELECT u.id, u.username, u.name, u.role, u.role_id, u.active, u.created_at,
+         r.name AS role_name, r.is_admin
+  FROM users u LEFT JOIN roles r ON r.id = u.role_id`;
+
+const getUser = (id) => db.prepare(`${USER_SQL} WHERE u.id = ?`).get(id);
+
+const getRole = (id) => db.prepare('SELECT id, is_admin FROM roles WHERE id = ?').get(Number(id));
+
+/** Otros administradores activos además del usuario indicado. */
+function otherActiveAdmins(userId) {
+  return db
+    .prepare(
+      `SELECT COUNT(*) AS c FROM users u JOIN roles r ON r.id = u.role_id
+       WHERE r.is_admin = 1 AND u.active = 1 AND u.id <> ?`
+    )
+    .get(userId).c;
+}
+
+router.get('/users', canManageUsers, (req, res) => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 10));
+  const offset = (page - 1) * pageSize;
+
+  const total = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
   const items = db
-    .prepare('SELECT id, email, name, role, active, created_at FROM users ORDER BY role, name')
-    .all()
+    .prepare(`${USER_SQL} ORDER BY r.is_admin DESC, role_name, u.name LIMIT ? OFFSET ?`)
+    .all(pageSize, offset)
     .map(mapUser);
-  res.json({ items });
+  res.json({ items, total });
 });
 
-router.post('/users', (req, res) => {
-  const email = cleanEmail(req.body?.email);
+router.post('/users', canManageUsers, (req, res) => {
+  const username = cleanUsername(req.body?.username);
   const name = cleanName(req.body?.name);
-  const role = ROLES.includes(req.body?.role) ? req.body.role : 'cashier';
   const password = String(req.body?.password ?? '');
+  const role = getRole(req.body?.role_id);
   if (!name) return bad(res, 400, 'Escribe un nombre');
-  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    return bad(res, 400, 'Escribe un correo válido');
-  }
+  if (!username || username.length < 3) return bad(res, 400, 'El usuario debe tener al menos 3 caracteres');
   if (password.length < 6) return bad(res, 400, 'La contraseña debe tener al menos 6 caracteres');
-  const dup = db
-    .prepare('SELECT id FROM users WHERE lower(email) = lower(?) OR lower(username) = lower(?)')
-    .get(email, email);
-  if (dup) return bad(res, 409, 'Ya existe un usuario con ese correo');
+  if (!role) return bad(res, 400, 'Selecciona un rol válido');
+  if (role.is_admin && !req.access.is_admin) {
+    return bad(res, 403, 'Solo un administrador puede crear otros administradores');
+  }
+  const dup = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (dup) return bad(res, 409, 'Ya existe un usuario con ese nombre');
   const info = db
     .prepare(
-      'INSERT INTO users (username, email, password_hash, name, role, active) VALUES (?, ?, ?, ?, ?, 1)'
+      'INSERT INTO users (username, password_hash, name, role, role_id, active, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)'
     )
-    .run(email, email, bcrypt.hashSync(password, 10), name, role);
-  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
-  res.status(201).json({ item: mapUser(row) });
+    .run(username, bcrypt.hashSync(password, 10), name, role.is_admin ? 'admin' : 'cashier', role.id, now());
+  res.status(201).json({ item: mapUser(getUser(info.lastInsertRowid)) });
 });
 
-router.put('/users/:id', (req, res) => {
+router.put('/users/:id', canManageUsers, (req, res) => {
   const id = Number(req.params.id);
-  const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const row = getUser(id);
   if (!row) return bad(res, 404, 'Usuario no encontrado');
+  const isSelf = req.session.user_id === id;
+  if (row.is_admin && !req.access.is_admin) {
+    return bad(res, 403, 'Solo un administrador puede modificar a otro administrador');
+  }
 
   const updates = [];
   const params = [];
-  let roleChanged = false;
-  let passwordChanged = false;
-  let deactivated = false;
+  let closeSessions = false;
 
   if (req.body?.name !== undefined) {
     const name = cleanName(req.body.name);
@@ -224,37 +254,47 @@ router.put('/users/:id', (req, res) => {
     updates.push('name = ?');
     params.push(name);
   }
-  if (req.body?.email !== undefined) {
-    const email = cleanEmail(req.body.email);
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return bad(res, 400, 'Correo no válido');
+  if (req.body?.username !== undefined) {
+    const username = cleanUsername(req.body.username);
+    if (!username || username.length < 3) return bad(res, 400, 'El usuario debe tener al menos 3 caracteres');
     const dup = db
-      .prepare('SELECT id FROM users WHERE (lower(email) = lower(?) OR lower(username) = lower(?)) AND id <> ?')
-      .get(email, email, id);
-    if (dup) return bad(res, 409, 'Ese correo ya está en uso');
-    updates.push('email = ?', 'username = ?');
-    params.push(email, email);
+      .prepare('SELECT id FROM users WHERE username = ? AND id <> ?')
+      .get(username, id);
+    if (dup) return bad(res, 409, 'Ese nombre de usuario ya está en uso');
+    updates.push('username = ?');
+    params.push(username);
   }
-  if (req.body?.role !== undefined) {
-    if (!ROLES.includes(req.body.role)) return bad(res, 400, 'Rol no válido');
-    if (req.session.user_id === id && req.body.role !== 'admin') {
-      return bad(res, 400, 'No puedes quitarte el rol de administrador');
+  if (req.body?.role_id !== undefined && Number(req.body.role_id) !== row.role_id) {
+    const role = getRole(req.body.role_id);
+    if (!role) return bad(res, 400, 'Selecciona un rol válido');
+    if (isSelf) return bad(res, 400, 'No puedes cambiar tu propio rol');
+    if (role.is_admin && !req.access.is_admin) {
+      return bad(res, 403, 'Solo un administrador puede asignar el rol Administrador');
     }
-    if (req.body.role !== row.role) roleChanged = true;
-    updates.push('role = ?');
-    params.push(req.body.role);
+    if (row.is_admin && !role.is_admin && row.active && otherActiveAdmins(id) === 0) {
+      return bad(res, 400, 'Debe quedar al menos un administrador activo');
+    }
+    updates.push('role_id = ?', 'role = ?');
+    params.push(role.id, role.is_admin ? 'admin' : 'cashier');
+    closeSessions = true;
   }
   if (req.body?.active !== undefined) {
-    if (req.session.user_id === id && !req.body.active) {
+    if (isSelf && !req.body.active) {
       return bad(res, 400, 'No puedes desactivar tu propia cuenta');
     }
-    if (!req.body.active) deactivated = true;
+    if (!req.body.active) {
+      if (row.is_admin && otherActiveAdmins(id) === 0) {
+        return bad(res, 400, 'Debe quedar al menos un administrador activo');
+      }
+      closeSessions = true;
+    }
     updates.push('active = ?');
     params.push(req.body.active ? 1 : 0);
   }
   if (req.body?.password) {
     const password = String(req.body.password);
     if (password.length < 6) return bad(res, 400, 'La contraseña debe tener al menos 6 caracteres');
-    passwordChanged = true;
+    closeSessions = true;
     updates.push('password_hash = ?');
     params.push(bcrypt.hashSync(password, 10));
   }
@@ -262,27 +302,24 @@ router.put('/users/:id', (req, res) => {
 
   params.push(id);
   db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+  if (closeSessions) closeUserSessions(id);
 
-  if (deactivated || passwordChanged) {
-    closeUserSessions(id, { reason: deactivated ? 'deactivated' : 'password_change' });
-  } else if (roleChanged) {
-    closeUserSessions(id, {
-      exceptToken: req.session.user_id === id ? req.session.token : undefined,
-      reason: 'role_change',
-    });
-  }
-
-  const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-  res.json({ item: mapUser(updated) });
+  res.json({ item: mapUser(getUser(id)) });
 });
 
-router.delete('/users/:id', (req, res) => {
+router.delete('/users/:id', canManageUsers, (req, res) => {
   const id = Number(req.params.id);
   if (req.session.user_id === id) return bad(res, 400, 'No puedes desactivar tu propia cuenta');
-  const row = db.prepare('SELECT id FROM users WHERE id = ?').get(id);
+  const row = getUser(id);
   if (!row) return bad(res, 404, 'No encontrado');
+  if (row.is_admin && !req.access.is_admin) {
+    return bad(res, 403, 'Solo un administrador puede desactivar a otro administrador');
+  }
+  if (row.is_admin && otherActiveAdmins(id) === 0) {
+    return bad(res, 400, 'Debe quedar al menos un administrador activo');
+  }
   db.prepare('UPDATE users SET active = 0 WHERE id = ?').run(id);
-  closeUserSessions(id, { reason: 'deactivated' });
+  closeUserSessions(id);
   res.json({ ok: true });
 });
 

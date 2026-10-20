@@ -14,12 +14,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../lib/auth';
 import { useSettings } from '../../lib/settings';
-import type { UserRole } from '../../lib/types';
-
-const ROLE_LABEL: Record<UserRole, string> = {
-  admin: 'Administrador',
-  cashier: 'Cajero(a)',
-};
 
 interface QuickCard {
   to: string;
@@ -27,7 +21,7 @@ interface QuickCard {
   description: string;
   icon: LucideIcon;
   tint: string;
-  roles: UserRole[];
+  perm: string;
 }
 
 const QUICK: QuickCard[] = [
@@ -37,7 +31,7 @@ const QUICK: QuickCard[] = [
     description: 'Consulta resultados y estadísticas de satisfacción.',
     icon: ChartColumnBig,
     tint: 'bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300',
-    roles: ['admin', 'cashier'],
+    perm: 'surveys.stats',
   },
   {
     to: '/app/encuestas/respuestas',
@@ -45,7 +39,7 @@ const QUICK: QuickCard[] = [
     description: 'Explora cada encuesta recibida y sus detalles.',
     icon: MessageSquareText,
     tint: 'bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300',
-    roles: ['admin'],
+    perm: 'surveys.responses',
   },
   {
     to: '/app/catalogos/tiendas',
@@ -53,7 +47,7 @@ const QUICK: QuickCard[] = [
     description: 'Administra tiendas, cajas y cajeros(as).',
     icon: Store,
     tint: 'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300',
-    roles: ['admin'],
+    perm: 'catalog.branches',
   },
   {
     to: '/app/ajustes/informacion',
@@ -61,7 +55,7 @@ const QUICK: QuickCard[] = [
     description: 'Configura la identidad y la información de la tienda.',
     icon: Settings,
     tint: 'bg-sky-50 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300',
-    roles: ['admin', 'cashier'],
+    perm: 'settings.info',
   },
 ];
 
@@ -75,10 +69,9 @@ const SOON: { label: string; description: string; icon: LucideIcon }[] = [
 ];
 
 export default function PanelPage() {
-  const { user, role } = useAuth();
+  const { user, can } = useAuth();
   const { settings } = useSettings();
-  const activeRole: UserRole = role === 'cashier' ? 'cashier' : 'admin';
-  const quick = QUICK.filter((c) => c.roles.includes(activeRole));
+  const quick = QUICK.filter((c) => can(c.perm));
 
   return (
     <div className="space-y-6">
@@ -87,7 +80,7 @@ export default function PanelPage() {
           Hola {user?.name || 'de nuevo'}
         </h1>
         <p className="mt-0.5 text-[13px] text-muted">
-          {ROLE_LABEL[activeRole]} · {settings.store_name}
+          {user?.role_name} · {settings.store_name}
         </p>
       </div>
 

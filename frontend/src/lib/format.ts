@@ -36,14 +36,6 @@ export function timeAgo(iso: string): string {
   return `hace ${days} d`;
 }
 
-export function round1(n: number): number {
-  return Math.round(n * 10) / 10;
-}
-
-export function fmtAvg(n: number): string {
-  return (Number.isFinite(n) ? n : 0).toFixed(2);
-}
-
 export function sessionLabel(s: {
   role: string;
   user_name: string | null;
@@ -53,4 +45,11 @@ export function sessionLabel(s: {
 }): string {
   if (s.role === 'admin') return `Administrador · ${s.user_name || 'admin'}`;
   return [s.branch_name, s.register_name, s.cashier_name].filter(Boolean).join(' · ') || 'Caja';
+}
+
+/** Iniciales de la tienda para cuando no hay logo: "Mi Tienda" → "MT", "Abarrotes" → "A". */
+export function storeInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const letters = words.slice(0, 2).map((w) => w[0]);
+  return (letters.join('') || 'S').toUpperCase();
 }

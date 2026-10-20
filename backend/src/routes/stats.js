@@ -1,68 +1,54 @@
 import { Router } from 'express';
 import { db } from '../db.js';
 import { questions } from '../questions.js';
-import { requireAuth } from '../middleware.js';
+import { requireAuth, requirePermission } from '../middleware.js';
 import { loadSurveys, localDate } from '../store.js';
 
 const router = Router();
 
-router.get('/stats', requireAuth('admin', 'cashier'), (req, res) => {
+// Respuesta con la forma de StatsResponse (frontend/src/lib/types.ts).
+router.get('/stats', requirePermission('surveys.stats'), (req, res) => {
   const rows = loadSurveys(req.query, { limit: 20000 });
   const total = rows.length;
-  const ratingSum = rows.reduce((s, r) => s + r.rating, 0);
-  const avgRating = total ? Math.round((ratingSum / total) * 100) / 100 : 0;
 
-  const ratingDist = [1, 2, 3, 4, 5].map((r) => ({
-    rating: r,
-    count: rows.filter((row) => row.rating === r).length,
-  }));
+  const ratingCounts = { good: 0, regular: 0, bad: 0, none: 0 };
+  for (const r of rows) ratingCounts[ratingKey(r.rating)]++;
 
   const allGoodCount = rows.filter((r) => r.dislikes.includes('Ninguna, todo bien')).length;
-
-  const areas = countLabels(rows, 'areas', questions.questions[0].options);
-  const dislikes = countLabels(rows, 'dislikes', questions.questions[1].options);
-  const likes = countLabels(rows, 'likes', questions.questions[2].options);
 
   const trendMap = new Map();
   for (const r of rows) {
     const day = localDate(r.created_at);
-    const entry = trendMap.get(day) || { date: day, count: 0, ratingSum: 0 };
+    const entry = trendMap.get(day) || { date: day, count: 0, good: 0, regular: 0, bad: 0 };
     entry.count++;
-    entry.ratingSum += r.rating;
+    if (r.rating in entry) entry[r.rating]++;
     trendMap.set(day, entry);
   }
-  const trend = [...trendMap.values()]
-    .map((e) => ({ date: e.date, count: e.count, avg: Math.round((e.ratingSum / e.count) * 100) / 100 }))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  const byRegister = groupStats(rows, 'register_id', 'register_name');
-  const byCashier = groupStats(rows, 'cashier_id', 'cashier_name');
-  const byBranch = groupStats(rows, 'branch_id', 'branch_name');
-
-  const recent = rows.slice(0, 8);
+  const trend = [...trendMap.values()].sort((a, b) => a.date.localeCompare(b.date));
 
   res.json({
     total,
-    avgRating,
+    ratingCounts,
     allGoodCount,
     allGoodPct: total ? Math.round((allGoodCount / total) * 100) : 0,
-    ratingDist,
-    areas,
-    dislikes,
-    likes,
+    areas: countLabels(rows, 'areas', questions.questions[0].options),
+    dislikes: countLabels(rows, 'dislikes', questions.questions[1].options),
+    likes: countLabels(rows, 'likes', questions.questions[2].options),
     trend,
-    byRegister,
-    byCashier,
-    byBranch,
-    recent,
+    byRegister: groupStats(rows, 'register_id', 'register_name'),
+    byCashier: groupStats(rows, 'cashier_id', 'cashier_name'),
+    byBranch: groupStats(rows, 'branch_id', 'branch_name'),
+    recent: rows.slice(0, 8),
   });
 });
 
-router.get('/activity', requireAuth('admin'), (req, res) => {
+// Respuesta con la forma de ActivityResponse. La tabla sessions solo guarda usuarios,
+// así que los datos de tienda/caja/cajero y el motivo de cierre van en null.
+router.get('/activity', requireAuth(), (_req, res) => {
   const sessions = db
     .prepare(
-      `SELECT id, role, user_name, branch_name, register_name, cashier_name,
-              created_at, closed_at, close_reason
+      `SELECT id, role, user_name, NULL AS branch_name, NULL AS register_name,
+              NULL AS cashier_name, created_at, closed_at, NULL AS close_reason
        FROM sessions
        ORDER BY COALESCE(closed_at, created_at) DESC
        LIMIT 40`
@@ -71,7 +57,9 @@ router.get('/activity', requireAuth('admin'), (req, res) => {
 
   const since = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
   const recentClosures = sessions.filter((s) => s.closed_at && s.closed_at >= since);
-  const openSessions = sessions.filter((s) => !s.closed_at && s.role === 'cashier').length;
+  const openSessions = db
+    .prepare('SELECT COUNT(*) AS c FROM sessions WHERE closed_at IS NULL AND expires_at > ?')
+    .get(new Date().toISOString()).c;
 
   const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
   const surveysLast24h = db
@@ -80,6 +68,10 @@ router.get('/activity', requireAuth('admin'), (req, res) => {
 
   res.json({ sessions, recentClosures, openSessions, surveysLast24h });
 });
+
+function ratingKey(rating) {
+  return rating === 'good' || rating === 'regular' || rating === 'bad' ? rating : 'none';
+}
 
 function countLabels(rows, key, canonical) {
   const index = new Map(canonical.map((label, i) => [label, i]));
@@ -97,16 +89,13 @@ function countLabels(rows, key, canonical) {
 function groupStats(rows, idKey, nameKey) {
   const map = new Map();
   for (const r of rows) {
-    const id = r[idKey];
-    const name = r[nameKey] || 'Sin asignar';
-    const entry = map.get(id) || { id, name, count: 0, ratingSum: 0 };
+    const id = r[idKey] ?? null;
+    const entry = map.get(id) || { id, name: r[nameKey] || 'Sin asignar', count: 0, good: 0, regular: 0, bad: 0 };
     entry.count++;
-    entry.ratingSum += r.rating;
+    if (r.rating in entry) entry[r.rating]++;
     map.set(id, entry);
   }
-  return [...map.values()]
-    .map((e) => ({ id: e.id, name: e.name, count: e.count, avg: Math.round((e.ratingSum / e.count) * 100) / 100 }))
-    .sort((a, b) => b.count - a.count);
+  return [...map.values()].sort((a, b) => b.count - a.count);
 }
 
 export default router;

@@ -1,19 +1,23 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { api } from '../../lib/api';
+import { api, apiCached } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useTheme } from '../../lib/theme';
 import { useSettings } from '../../lib/settings';
+import StoreLogo from '../../components/StoreLogo';
 import { enqueueSurvey, flushOutbox, getPendingCount, subscribeOutbox } from '../../lib/offline';
-import type { Branch, Cashier, KioskSessionInfo, Register } from '../../lib/types';
+import type { Branch, Cashier, KioskSessionInfo, RatingValue, Register } from '../../lib/types';
 import type { Step } from './kioskTypes';
 import {
   advanceQuestionIndex,
   clearDraft,
+  clearKioskState,
   getQuestionIndex,
   makeUuid,
   readDraft,
+  readKioskState,
   saveDraft,
+  saveKioskState,
   startCooldown,
   SURVEY_COOLDOWN_MS,
 } from './kioskTypes';
@@ -21,10 +25,13 @@ import { QUESTIONS, isExclusiveOption } from '../../lib/questions';
 import { ConfirmDialog, Spinner, ThemeToggleButton } from '../../components/Modal';
 import Select from '../../components/Select';
 import { IconChevronRight, IconCloudCheck, IconCloudOff, IconLogout } from '../../components/Icons';
-import HomeScreen from './screens/HomeScreen';
 import QuestionScreen from './screens/QuestionScreen';
 import FacesScreen from './screens/FacesScreen';
 import ThanksScreen from './screens/ThanksScreen';
+import FailedOutbox from './FailedOutbox';
+
+const QUESTION_IDLE_ADVANCE_MS = 5000;
+const RATING_IDLE_RESTART_MS = 5000;
 
 export default function KioskPage() {
   const { ready, user } = useAuth();
@@ -32,18 +39,19 @@ export default function KioskPage() {
   const { settings, logo } = useSettings();
   const navigate = useNavigate();
 
-  const [step, setStep] = useState<Step>('select');
-  const [session, setSession] = useState<KioskSessionInfo | null>(null);
-  const [questionIndex, setQuestionIndex] = useState(0);
-  const [selected, setSelected] = useState<string[]>([]);
+  const [boot] = useState(() => readKioskState());
+  const [step, setStep] = useState<Step>(boot?.step ?? 'select');
+  const [session, setSession] = useState<KioskSessionInfo | null>(boot?.session ?? null);
+  const [questionIndex, setQuestionIndex] = useState(boot?.questionIndex ?? 0);
+  const [selected, setSelected] = useState<string[]>(boot?.selected ?? []);
   const [exitOpen, setExitOpen] = useState(false);
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [registers, setRegisters] = useState<Register[]>([]);
   const [cashiers, setCashiers] = useState<Cashier[]>([]);
-  const [branchId, setBranchId] = useState('');
-  const [registerId, setRegisterId] = useState('');
-  const [cashierId, setCashierId] = useState('');
+  const [branchId, setBranchId] = useState(boot?.branchId ?? '');
+  const [registerId, setRegisterId] = useState(boot?.registerId ?? '');
+  const [cashierId, setCashierId] = useState(boot?.cashierId ?? '');
   const [selectError, setSelectError] = useState('');
 
   const pending = useSyncExternalStore(subscribeOutbox, getPendingCount);
@@ -73,27 +81,42 @@ export default function KioskPage() {
     flush();
   }, [flush]);
 
+  // Latido: mantiene viva la sesión del kiosko (expiración deslizante).
   useEffect(() => {
-    api<{ items: Branch[] }>('/api/branches?active=1')
+    const ping = () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      api('/api/auth/me').catch(() => undefined);
+    };
+    ping();
+    const timer = window.setInterval(ping, 10 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    apiCached<{ items: Branch[] }>('/api/catalog/branches')
       .then((res) => {
         setBranches(res.items);
         const preferred = res.items.find((b) => /super\s*nallely/i.test(b.name)) ?? res.items[0];
-        if (preferred) setBranchId(String(preferred.id));
+        if (preferred) setBranchId((current) => current || String(preferred.id));
       })
       .catch(() => setSelectError('No se pudo conectar con el servidor'));
   }, []);
 
+  const prevBranchRef = useRef<string | null>(null);
   useEffect(() => {
     if (!branchId) {
       setRegisters([]);
       setCashiers([]);
       return;
     }
-    setRegisterId('');
-    setCashierId('');
+    if (prevBranchRef.current !== null && prevBranchRef.current !== branchId) {
+      setRegisterId('');
+      setCashierId('');
+    }
+    prevBranchRef.current = branchId;
     Promise.all([
-      api<{ items: Register[] }>(`/api/branches/${branchId}/registers?active=1`),
-      api<{ items: Cashier[] }>(`/api/branches/${branchId}/cashiers?active=1`),
+      apiCached<{ items: Register[] }>(`/api/catalog/registers?branch_id=${branchId}`),
+      apiCached<{ items: Cashier[] }>(`/api/catalog/cashiers?branch_id=${branchId}`),
     ])
       .then(([r, c]) => {
         setRegisters(r.items);
@@ -101,6 +124,45 @@ export default function KioskPage() {
       })
       .catch(() => setSelectError('No se pudieron cargar las cajas y cajeros(as)'));
   }, [branchId]);
+
+  useEffect(() => {
+    saveKioskState({ step, session, branchId, registerId, cashierId, questionIndex, selected });
+  }, [step, session, branchId, registerId, cashierId, questionIndex, selected]);
+
+  useEffect(() => {
+    if (step !== 'question') return;
+    if (selected.length === 0) return;
+
+    let timer = 0;
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setStep('rating'), QUESTION_IDLE_ADVANCE_MS);
+    };
+    const events: Array<keyof WindowEventMap> = [
+      'pointerdown',
+      'pointermove',
+      'touchstart',
+      'touchmove',
+      'mousemove',
+      'keydown',
+      'wheel',
+    ];
+    events.forEach((e) => window.addEventListener(e, arm, { passive: true }));
+    arm();
+
+    return () => {
+      window.clearTimeout(timer);
+      events.forEach((e) => window.removeEventListener(e, arm));
+    };
+  }, [step, selected]);
+
+  useEffect(() => {
+    if (step !== 'rating') return;
+    const timer = window.setTimeout(() => {
+      finish(null);
+    }, RATING_IDLE_RESTART_MS);
+    return () => window.clearTimeout(timer);
+  }, [step]);
 
   if (!ready) {
     return (
@@ -131,7 +193,7 @@ export default function KioskPage() {
       register: { id: register.id, name: register.name },
       cashier: { id: cashier.id, name: cashier.name },
     });
-    setStep('home');
+    start();
   };
 
   const toggleOption = (option: string) => {
@@ -146,7 +208,7 @@ export default function KioskPage() {
     });
   };
 
-  const start = () => {
+  const start = useCallback(() => {
     const idx = getQuestionIndex();
     setQuestionIndex(idx);
     const draft = readDraft();
@@ -157,15 +219,9 @@ export default function KioskPage() {
       setSelected([]);
     }
     setStep('question');
-  };
-
-  const restart = useCallback(() => {
-    clearDraft();
-    setSelected([]);
-    setStep('home');
   }, []);
 
-  const finish = (ratingValue: number) => {
+  const finish = (ratingValue: RatingValue | null) => {
     if (!session) return;
     const payload = {
       client_uuid: makeUuid(),
@@ -201,10 +257,11 @@ export default function KioskPage() {
     <div className="flex min-h-dvh flex-col">
       <header className="z-20 flex h-16 items-center justify-between gap-3 border-b border-line bg-surface/80 px-4 text-ink backdrop-blur sm:px-6">
         <div className="flex items-center gap-2.5">
-          <img
-            src={logo}
-            alt={settings.store_name}
-            className="h-9 w-9 rounded-xl object-cover ring-1 ring-line"
+          <StoreLogo
+            name={settings.store_name}
+            logo={logo}
+            className="h-9 w-9 rounded-xl ring-1 ring-line"
+            textClassName="text-[13px]"
           />
           <div className="leading-tight">
             <p className="text-sm font-semibold tracking-tight">{settings.store_name}</p>
@@ -229,7 +286,8 @@ export default function KioskPage() {
               {!online ? `Sin conexión (${pending})` : `Enviando ${pending}…`}
             </span>
           )}
-          <ThemeToggleButton onClick={toggle} theme={theme} variant="light" />
+          <FailedOutbox />
+          <ThemeToggleButton onClick={toggle} theme={theme} />
           <button
             onClick={() => setExitOpen(true)}
             className="flex h-9 items-center gap-1.5 rounded-full bg-faint px-3 text-xs font-semibold text-ink/80 transition hover:bg-hairline"
@@ -307,17 +365,13 @@ export default function KioskPage() {
           </div>
         )}
 
-        {step === 'home' && session && (
-          <HomeScreen session={session} onStart={start} />
-        )}
-
         {step === 'question' && (
           <QuestionScreen
             question={question}
             selected={selected}
             onToggle={toggleOption}
             onNext={() => setStep('rating')}
-            onBack={restart}
+            onBack={() => setStep('select')}
           />
         )}
 
@@ -326,7 +380,7 @@ export default function KioskPage() {
         )}
 
         {step === 'thanks' && (
-          <ThanksScreen onRestart={restart} cooldownMs={SURVEY_COOLDOWN_MS} />
+          <ThanksScreen onRestart={start} cooldownMs={SURVEY_COOLDOWN_MS} />
         )}
       </main>
 
@@ -338,6 +392,7 @@ export default function KioskPage() {
         cancelLabel="Continuar aquí"
         onConfirm={() => {
           setExitOpen(false);
+          clearKioskState();
           navigate('/app');
         }}
         onClose={() => setExitOpen(false)}

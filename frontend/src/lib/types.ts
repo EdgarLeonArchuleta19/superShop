@@ -29,16 +29,57 @@ export interface KioskSessionInfo {
 
 export type UserRole = 'admin' | 'cashier';
 
-export interface AuthUser {
-  id: number;
-  email: string;
-  name: string;
-  role: UserRole;
+export type RatingValue = 'good' | 'regular' | 'bad';
+
+export interface RatingCounts {
+  good: number;
+  regular: number;
+  bad: number;
+  none: number;
 }
 
-export interface AdminUserRow extends AuthUser {
+export interface GroupStats {
+  id: number | null;
+  name: string;
+  count: number;
+  good: number;
+  regular: number;
+  bad: number;
+}
+
+export interface AuthUser {
+  id: number;
+  username: string;
+  name: string;
+  /** Nivel heredado: 'admin' solo para el rol Administrador. Para permisos usa `can()`. */
+  role: UserRole;
+  role_id: number | null;
+  role_name: string;
+  is_admin: boolean;
+  permissions: string[];
+}
+
+export interface AdminUserRow {
+  id: number;
+  username: string;
+  name: string;
+  role: UserRole;
+  role_id: number | null;
+  role_name: string;
   active: 0 | 1;
   created_at: string;
+}
+
+export interface RoleRow {
+  id: number;
+  name: string;
+  description: string;
+  permissions: string[];
+  is_system: boolean;
+  is_admin: boolean;
+  user_count: number;
+  created_at: string;
+  updated_at: string | null;
 }
 
 export interface Survey {
@@ -54,7 +95,7 @@ export interface Survey {
   areas: string[];
   dislikes: string[];
   likes: string[];
-  rating: number;
+  rating: RatingValue | null;
   created_at: string;
   client_ts: string | null;
 }
@@ -67,7 +108,7 @@ export interface SurveyPayload {
   areas: string[];
   dislikes: string[];
   likes: string[];
-  rating: number;
+  rating: RatingValue | null;
   client_ts: string;
 }
 
@@ -78,17 +119,16 @@ export interface LabeledCount {
 
 export interface StatsResponse {
   total: number;
-  avgRating: number;
+  ratingCounts: RatingCounts;
   allGoodCount: number;
   allGoodPct: number;
-  ratingDist: { rating: number; count: number }[];
   areas: LabeledCount[];
   dislikes: LabeledCount[];
   likes: LabeledCount[];
-  trend: { date: string; count: number; avg: number }[];
-  byRegister: { id: number | null; name: string; count: number; avg: number }[];
-  byCashier: { id: number | null; name: string; count: number; avg: number }[];
-  byBranch: { id: number | null; name: string; count: number; avg: number }[];
+  trend: { date: string; count: number; good: number; regular: number; bad: number }[];
+  byRegister: GroupStats[];
+  byCashier: GroupStats[];
+  byBranch: GroupStats[];
   recent: Survey[];
 }
 

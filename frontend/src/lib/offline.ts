@@ -1,15 +1,26 @@
 import { api, ApiError, NetError, getToken } from './api';
+import type { TokenRole } from './api';
 import type { SurveyPayload } from './types';
 
 const OUTBOX_KEY = 'nallely.outbox';
 const FAILED_KEY = 'nallely.outbox.failed';
-const MAX_ATTEMPTS = 8;
+/** El servidor acepta como máximo 200 encuestas por lote. */
+const MAX_BATCH = 200;
+/** Reintentos permitidos ante errores del servidor (5xx) antes de descartar. */
+const MAX_SERVER_RETRIES = 12;
+
+export type FailureReason = 'server' | 'invalid' | 'unknown';
 
 export interface QueuedSurvey {
   uuid: string;
   payload: SurveyPayload;
   queuedAt: number;
   attempts: number;
+}
+
+export interface FailedSurvey extends QueuedSurvey {
+  failedAt: number;
+  reason: FailureReason;
 }
 
 export interface FlushResult {
@@ -20,7 +31,7 @@ export interface FlushResult {
 }
 
 let cache: QueuedSurvey[] | null = null;
-let flushing = false;
+let flushPromise: Promise<FlushResult> | null = null;
 const listeners = new Set<() => void>();
 
 function read(): QueuedSurvey[] {
@@ -45,6 +56,37 @@ function write(items: QueuedSurvey[]): void {
   for (const fn of listeners) fn();
 }
 
+function readFailed(): FailedSurvey[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(FAILED_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeFailed(items: FailedSurvey[]): void {
+  try {
+    localStorage.setItem(FAILED_KEY, JSON.stringify(items));
+  } catch {
+    /* almacenamiento lleno: se conserva en memoria */
+  }
+  for (const fn of listeners) fn();
+}
+
+function moveToFailed(items: QueuedSurvey[], reason: FailureReason): void {
+  if (!items.length) return;
+  const now = Date.now();
+  const next: FailedSurvey[] = items.map((i) => ({ ...i, failedAt: now, reason }));
+  writeFailed([...readFailed(), ...next]);
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 export function subscribeOutbox(fn: () => void): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
@@ -55,12 +97,11 @@ export function getPendingCount(): number {
 }
 
 export function getFailedCount(): number {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(FAILED_KEY) || '[]');
-    return Array.isArray(parsed) ? parsed.length : 0;
-  } catch {
-    return 0;
-  }
+  return readFailed().length;
+}
+
+export function getFailedItems(): FailedSurvey[] {
+  return readFailed();
 }
 
 export function enqueueSurvey(payload: SurveyPayload): void {
@@ -69,62 +110,107 @@ export function enqueueSurvey(payload: SurveyPayload): void {
   write(items);
 }
 
-function moveToFailed(items: QueuedSurvey[]): void {
-  try {
-    const prev = JSON.parse(localStorage.getItem(FAILED_KEY) || '[]');
-    const list = Array.isArray(prev) ? prev : [];
-    localStorage.setItem(FAILED_KEY, JSON.stringify([...list, ...items]));
-  } catch {
-    /* ignorar */
+/** Devuelve las encuestas fallidas a la cola para reintentar su envío. */
+export function retryFailed(): void {
+  const failed = readFailed();
+  if (!failed.length) return;
+  const items = read().filter((i) => !failed.some((f) => f.uuid === i.uuid));
+  for (const f of failed) {
+    items.push({ uuid: f.uuid, payload: f.payload, queuedAt: f.queuedAt, attempts: 0 });
   }
+  write(items);
+  writeFailed([]);
+}
+
+/** Descartar encuestas fallidas de forma permanente. */
+export function clearFailed(): void {
+  writeFailed([]);
+}
+
+async function sendBatches(
+  items: QueuedSurvey[],
+  role: TokenRole | undefined
+): Promise<FlushResult> {
+  const sentUuids = new Set<string>();
+  const invalidUuids = new Set<string>();
+  const serverFailedUuids = new Set<string>();
+  let online = true;
+
+  for (const batch of chunk(items, MAX_BATCH)) {
+    try {
+      const res = await api<{
+        inserted: number;
+        duplicates: number;
+        invalid: number;
+        invalidUuids?: string[];
+      }>('/api/surveys/batch', {
+        method: 'POST',
+        body: { items: batch.map((i) => i.payload) },
+        role,
+      });
+      for (const item of batch) sentUuids.add(item.uuid);
+      for (const uuid of res.invalidUuids ?? []) invalidUuids.add(uuid);
+    } catch (err) {
+      if (err instanceof NetError) {
+        online = false;
+        break;
+      }
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        // Sesión vencida o sin permiso: se conservan en la cola (sin contar intento)
+        // y se envían cuando alguien con acceso a "Mi encuesta" vuelva a iniciar sesión.
+        break;
+      }
+      if (err instanceof ApiError && err.status === 400) {
+        // Lote inválido: se marca cada elemento para no bloquear al resto.
+        for (const item of batch) invalidUuids.add(item.uuid);
+        continue;
+      }
+      // 5xx u otro error de servidor: reintentar el lote más adelante.
+      for (const item of batch) serverFailedUuids.add(item.uuid);
+    }
+  }
+
+  const current = read();
+  const sent = current.filter((i) => sentUuids.has(i.uuid));
+  const invalid = current.filter((i) => invalidUuids.has(i.uuid));
+  const serverFailed = current.filter((i) => serverFailedUuids.has(i.uuid));
+
+  // Los inválidos nunca se podrán enviar: van a fallidos directamente.
+  moveToFailed(invalid, 'invalid');
+
+  // Los que fallaron por servidor acumulan intentos; se descartan tras el tope.
+  const bumped = serverFailed.map((i) => ({ ...i, attempts: i.attempts + 1 }));
+  const dead = bumped.filter((i) => i.attempts >= MAX_SERVER_RETRIES);
+  const alive = bumped.filter((i) => i.attempts < MAX_SERVER_RETRIES);
+  moveToFailed(dead, 'server');
+
+  const untouched = current.filter(
+    (i) =>
+      !sentUuids.has(i.uuid) && !invalidUuids.has(i.uuid) && !serverFailedUuids.has(i.uuid)
+  );
+  write([...untouched, ...alive]);
+
+  return {
+    sent: sent.length,
+    pending: untouched.length + alive.length,
+    failed: getFailedCount(),
+    online,
+  };
 }
 
 export async function flushOutbox(): Promise<FlushResult> {
   const items = read();
   const failed = getFailedCount();
   if (!items.length) return { sent: 0, pending: 0, failed, online: true };
-  if (flushing) return { sent: 0, pending: items.length, failed, online: true };
+  if (flushPromise) return flushPromise;
 
   const online = typeof navigator === 'undefined' || navigator.onLine;
   if (!online) return { sent: 0, pending: items.length, failed, online: false };
 
-  flushing = true;
-  const uuids = new Set(items.map((i) => i.uuid));
   const role = getToken('kiosk') ? 'kiosk' : getToken('admin') ? 'admin' : undefined;
 
-  try {
-    const res = await api<{ inserted: number; duplicates: number; invalid: number }>(
-      '/api/surveys/batch',
-      { method: 'POST', body: { items: items.map((i) => i.payload) }, role }
-    );
-    const fresh = read().filter((i) => !uuids.has(i.uuid));
-    write(fresh);
-    return {
-      sent: res.inserted + res.duplicates,
-      pending: fresh.length,
-      failed: getFailedCount(),
-      online: true,
-    };
-  } catch (err) {
-    if (err instanceof NetError) {
-      return { sent: 0, pending: items.length, failed, online: false };
-    }
-    if (err instanceof ApiError && err.status >= 500) {
-      const bumped = read().map((i) =>
-        uuids.has(i.uuid) ? { ...i, attempts: i.attempts + 1 } : i
-      );
-      write(bumped);
-      return { sent: 0, pending: bumped.length, failed, online: true };
-    }
-    const bumped = read().map((i) =>
-      uuids.has(i.uuid) ? { ...i, attempts: i.attempts + 1 } : i
-    );
-    const dead = bumped.filter((i) => uuids.has(i.uuid) && i.attempts >= MAX_ATTEMPTS);
-    const alive = bumped.filter((i) => !dead.includes(i));
-    if (dead.length) moveToFailed(dead);
-    write(alive);
-    return { sent: 0, pending: alive.length, failed: getFailedCount(), online: true };
-  } finally {
-    flushing = false;
-  }
+  flushPromise = sendBatches(items, role).finally(() => {
+    flushPromise = null;
+  });
+  return flushPromise;
 }

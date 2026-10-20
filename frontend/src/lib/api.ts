@@ -20,7 +20,7 @@ export class NetError extends Error {
 
 export function getToken(_role?: TokenRole): string | null {
   try {
-    return sessionStorage.getItem(TOKEN_KEY);
+    return localStorage.getItem(TOKEN_KEY);
   } catch {
     return null;
   }
@@ -30,7 +30,7 @@ export function setToken(token: string): void;
 export function setToken(_role: TokenRole, token: string): void;
 export function setToken(a: string, b?: string): void {
   try {
-    sessionStorage.setItem(TOKEN_KEY, b ?? a);
+    localStorage.setItem(TOKEN_KEY, b ?? a);
   } catch {
     /* ignorar */
   }
@@ -38,7 +38,7 @@ export function setToken(a: string, b?: string): void {
 
 export function clearToken(_role?: TokenRole): void {
   try {
-    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
   } catch {
     /* ignorar */
   }
@@ -78,4 +78,33 @@ export async function api<T>(
     throw new ApiError(res.status, msg);
   }
   return data as T;
+}
+
+const CACHE_PREFIX = 'nallely.cache.';
+
+/**
+ * Igual que `api`, pero guarda la respuesta en localStorage y la devuelve
+ * como respaldo cuando no hay conexión. Pensado para catálogos (tiendas,
+ * cajas, cajeros) que el kiosko necesita para arrancar sin internet.
+ */
+export async function apiCached<T>(path: string): Promise<T> {
+  try {
+    const res = await api<T>(path);
+    try {
+      localStorage.setItem(CACHE_PREFIX + path, JSON.stringify(res));
+    } catch {
+      /* almacenamiento lleno: se ignora */
+    }
+    return res;
+  } catch (err) {
+    if (err instanceof NetError) {
+      try {
+        const raw = localStorage.getItem(CACHE_PREFIX + path);
+        if (raw) return JSON.parse(raw) as T;
+      } catch {
+        /* cache inválida: se propaga el error original */
+      }
+    }
+    throw err;
+  }
 }
