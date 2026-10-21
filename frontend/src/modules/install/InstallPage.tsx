@@ -269,7 +269,7 @@ export default function InstallPage({ app = 'admin', onContinue }: { app?: keyof
         {/* iPad/iPhone: la app agregada a inicio no comparte datos con Safari. */}
         {survey && (platform === 'ios-safari' || platform === 'ios-other') && (
           <p className="mt-4 text-center text-[13px] text-muted">
-            Al abrirla desde el inicio te mostrará un código: escríbelo en SuperShop → Vincular dispositivos.
+            Si al abrirla desde el inicio te muestra un código, escríbelo en SuperShop → Vincular dispositivos.
           </p>
         )}
 

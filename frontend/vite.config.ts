@@ -19,20 +19,30 @@ export default defineConfig({
       manifest: false,
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,jpg,ico,woff2,webmanifest}'],
-        navigateFallback: '/index.html',
-        // /encuestas no usa index.html: tiene su propia entrada (ver runtimeCaching).
-        navigateFallbackDenylist: [/^\/api\//, /^\/encuestas(\/|$)/],
+        // Las páginas se resuelven en runtimeCaching (primero la red), no con navigateFallback.
+        navigateFallback: null,
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
         runtimeCaching: [
           {
-            // SuperShop Survey: las pantallas de /encuestas se abren con encuestas.html (su
-            // manifiesto y su ícono), también sin conexión.
-            urlPattern: ({ request, url }) => request.mode === 'navigate' && /^\/encuestas(\/|$)/.test(url.pathname),
-            handler: async () =>
-              (await caches.match('/encuestas.html', { ignoreSearch: true })) || fetch('/encuestas.html'),
+            // Páginas: primero el servidor (hasta 4 s), para estrenar cada versión nueva desde
+            // la primera vez que se abre; sin conexión, la copia guardada. /encuestas usa
+            // encuestas.html (SuperShop Survey) y lo demás index.html (SuperShop).
+            urlPattern: ({ request, url }) => request.mode === 'navigate' && !url.pathname.startsWith('/api/'),
+            handler: async ({ request, url }) => {
+              const page = /^\/encuestas(\/|$)/.test(url.pathname) ? '/encuestas.html' : '/index.html';
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 4000);
+              try {
+                return await fetch(request, { signal: controller.signal });
+              } catch {
+                return (await caches.match(page, { ignoreSearch: true })) || Response.error();
+              } finally {
+                clearTimeout(timer);
+              }
+            },
           },
           {
             urlPattern: /\/api\/(catalog\/|settings(\?|$))/,

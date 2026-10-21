@@ -38,6 +38,7 @@ Todas las versiones notables documentadas aquí. Formato basado en [Keep a Chang
   - **Instalación:** al vincular una tablet aparece la pantalla **"Instala SuperShop Survey"**, con los pasos según el equipo (igual que la de SuperShop) y **"Seguir sin instalar"** para abrir la encuesta en el navegador. La app instalada abre directo en las encuestas, a pantalla completa.
   - **Barra del kiosko:** dice "SuperShop Survey", con la caja y la tienda.
   - **Corrección:** antes, el build agregaba el manifiesto azul también en las encuestas y el navegador podía instalar la app equivocada.
+  - **Siempre la versión nueva:** las páginas se piden primero al servidor (hasta 4 s) y solo sin conexión se usa la copia guardada. Antes, la primera vez después de una actualización se abría la versión vieja guardada en el equipo.
 - **Logo y nombre propios para las tablets:** **SuperShop** (logo de fondo azul) sigue igual para administrar y **SuperShop Survey** (logo blanco) para las tablets de encuestas. Cada QR de Vincular dispositivos lleva su logo al centro.
 - **Avisos de tablets** (notificaciones para quien tiene Vincular dispositivos):
   - Encuestas guardadas en una tablet que llevan más de 1 hora sin poder enviarse.
