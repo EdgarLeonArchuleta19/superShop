@@ -246,6 +246,7 @@ export function SurveyPairingCard({
   const [stalled, setStalled] = useState(false);
   const [paired, setPaired] = useState<PairedDevice | null>(null);
   const [busy, setBusy] = useState(false);
+  const [linkCode, setLinkCode] = useState('');
   const [now, setNow] = useState(() => Date.now());
   const request = useRef({ branchId, registerId, name });
   const renewing = useRef(false);
@@ -269,6 +270,26 @@ export function SurveyPairingCard({
       setBusy(false);
     }
   }, [toast]);
+
+  /** Vincular la tablet que muestra un código de 6 dígitos (por ejemplo, la app instalada). */
+  const linkByCode = async () => {
+    setBusy(true);
+    try {
+      const res = await api<{ device: PairedDevice }>('/api/admin/devices/link', {
+        method: 'POST',
+        body: { code: linkCode, branch_id: Number(branchId), register_id: Number(registerId), name: name.trim() },
+      });
+      setLinkCode('');
+      setPaired(res.device);
+      setStalled(false);
+      toast.create('Tablet vinculada', `${res.device.name} ya puede recibir encuestas.`);
+      onPaired?.();
+    } catch (err) {
+      toast.error('No se pudo vincular', err instanceof Error ? err.message : undefined);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const start = async () => {
     request.current = { branchId, registerId, name };
@@ -413,6 +434,34 @@ export function SurveyPairingCard({
               Generar código QR
             </button>
           </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void linkByCode();
+            }}
+            className="flex flex-wrap items-center gap-2 rounded-xl bg-faint px-3.5 py-3"
+          >
+            <label htmlFor="link-code" className="min-w-0 flex-1 text-[13px] text-ink/80">
+              ¿La tablet muestra un código? Escríbelo aquí:
+            </label>
+            <input
+              id="link-code"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={7}
+              value={linkCode}
+              onChange={(e) => setLinkCode(e.target.value.replace(/[^\d ]/g, ''))}
+              placeholder="000 000"
+              className="input h-10 w-32 text-center font-mono text-[16px] tracking-widest"
+            />
+            <button
+              type="submit"
+              disabled={busy || !branchId || !registerId || linkCode.replace(/\D/g, '').length !== 6}
+              className="btn-soft h-10 px-4 text-[13px]"
+            >
+              Vincular
+            </button>
+          </form>
         </div>
       )}
       <QrAddressPicker target={target} />

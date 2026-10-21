@@ -1,29 +1,108 @@
+import { useEffect, useState } from 'react';
 import StoreLogo from '../../components/StoreLogo';
+import { Spinner } from '../../components/Modal';
 import { IconAlert, IconTablet } from '../../components/Icons';
-import { forgetDevice } from '../../lib/device';
+import { claimLink, forgetDevice, requestLinkCode } from '../../lib/device';
 import type { DeviceStatus } from '../../lib/device';
 import { useSettings } from '../../lib/settings';
 
 interface Props {
-  status: Exclude<DeviceStatus, 'paired'> | 'no-place';
+  status: Exclude<DeviceStatus, 'paired' | 'checking'> | 'no-place';
   /** Encuestas guardadas en la tablet que aún no llegan al servidor. */
   pending: number;
 }
 
 const TEXT: Record<Props['status'], { title: string; body: string }> = {
   unpaired: {
-    title: 'Esta tablet no está vinculada',
-    body: 'Para usarla en encuestas, en SuperShop entra a Ajustes → Vincular dispositivos, genera el QR de "SuperShop Survey" y escanéalo con la cámara de esta tablet.',
+    title: 'Vincula esta tablet',
+    body: 'En SuperShop entra a Ajustes → Vincular dispositivos → SuperShop Survey, elige la caja y escribe este código:',
   },
   revoked: {
     title: 'Esta tablet fue desvinculada',
-    body: 'Ya no puede recibir encuestas. Para volver a usarla, genera un QR nuevo de "SuperShop Survey" en Vincular dispositivos y escanéalo con esta tablet.',
+    body: 'Para volver a usarla, en SuperShop → Vincular dispositivos → SuperShop Survey, elige la caja y escribe este código:',
   },
   'no-place': {
     title: 'Falta asignar la caja',
-    body: 'La caja o tienda de esta tablet ya no existe. En Vincular dispositivos, edita la tablet y asígnale una caja.',
+    body: 'La caja o tienda de esta tablet ya no existe. En Registro de accesos, edita la tablet y asígnale una caja.',
   },
 };
+
+/** Cada cuánto pregunta la tablet si ya escribieron su código en el panel. */
+const POLL_MS = 3000;
+
+/**
+ * Código de 6 dígitos para vincular desde el panel (como WhatsApp Web). Vincula exactamente
+ * esta app, aunque el QR se haya abierto antes en otro navegador. Al vincularse, recarga.
+ */
+function LinkCode() {
+  const [code, setCode] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    let secret = '';
+    let expiresAt = 0;
+    let timer = 0;
+
+    const fresh = async () => {
+      const res = await requestLinkCode();
+      if (!alive) return;
+      secret = res.secret;
+      expiresAt = Date.now() + res.ttl_ms;
+      setCode(res.code);
+    };
+
+    const tick = async () => {
+      if (!alive) return;
+      try {
+        if (!secret || Date.now() >= expiresAt) await fresh();
+        else {
+          const status = await claimLink(secret);
+          if (status === 'linked') {
+            window.location.replace('/encuestas');
+            return;
+          }
+          if (status === 'expired') await fresh();
+        }
+        if (alive) setError(false);
+      } catch {
+        if (alive) setError(true);
+      }
+      if (alive) timer = window.setTimeout(() => void tick(), POLL_MS);
+    };
+
+    void tick();
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  return (
+    <div className="mt-5">
+      {code ? (
+        <>
+          <p className="font-mono text-[44px] font-bold tracking-[0.18em] text-ink sm:text-[52px]">
+            {code.slice(0, 3)} {code.slice(3)}
+          </p>
+          <p className="mt-2 flex items-center justify-center gap-2 text-[12px] text-muted">
+            <Spinner className="h-3.5 w-3.5" />
+            Esperando… se vincula sola en cuanto lo escriban.
+          </p>
+        </>
+      ) : (
+        !error && (
+          <div className="grid place-items-center py-4">
+            <Spinner className="h-6 w-6 text-brand-600" />
+          </div>
+        )
+      )}
+      {error && (
+        <p className="mt-1 text-[12px] text-amber-700 dark:text-amber-300">Sin conexión con SuperShop. Reintentando…</p>
+      )}
+    </div>
+  );
+}
 
 /** Pantalla de la tablet cuando no puede mostrar encuestas. */
 export default function DeviceNotice({ status, pending }: Props) {
@@ -45,6 +124,8 @@ export default function DeviceNotice({ status, pending }: Props) {
         </span>
         <h1 className="text-lg font-semibold tracking-tight">{text.title}</h1>
         <p className="mt-1.5 text-[14px] text-muted">{text.body}</p>
+
+        {status !== 'no-place' && <LinkCode />}
 
         {pending > 0 && (
           <p className="mt-4 flex items-start gap-2 rounded-xl bg-amber-50 px-3.5 py-3 text-left text-[13px] text-amber-800 dark:bg-amber-500/15 dark:text-amber-200">

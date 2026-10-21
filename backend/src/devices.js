@@ -7,14 +7,20 @@ import { clientIp } from './security.js';
 /*
  * Tablets de "SuperShop Survey".
  *
- * Se vinculan sin usuario ni contraseña: en Vincular dispositivos se genera un QR con un
- * código de un solo uso que vence en 5 minutos. Al escanearlo, la tablet lo cambia por un
- * token propio (en la base solo queda su hash) que manda en el encabezado X-Device-Token.
- * Ese token solo sirve para enviar encuestas y para el latido de la tablet; no abre nada
- * del panel. Cada tablet queda fija a una tienda y una caja.
+ * Se vinculan sin usuario ni contraseña, de dos formas:
+ * - QR: en Vincular dispositivos se genera un código de un solo uso (5 min); al escanearlo,
+ *   la tablet lo cambia por su token.
+ * - Código en la tablet: la app (también la instalada) muestra 6 dígitos y en el panel se
+ *   escriben. Sirve cuando el QR se abrió en otro navegador que la app instalada.
+ * La tablet guarda su token (en la base solo queda su hash) y lo manda en X-Device-Token;
+ * además queda en la cookie ss_device como respaldo, por si se borra el almacenamiento.
+ * El token solo sirve para enviar encuestas y para el latido; no abre nada del panel.
  */
 
 export const DEVICE_HEADER = 'x-device-token';
+const DEVICE_COOKIE = 'ss_device';
+/** 400 días: el máximo que aceptan los navegadores. Se renueva con cada latido. */
+const DEVICE_COOKIE_MAX_AGE_S = 400 * 24 * 3600;
 export const PAIRING_TTL_MS = 5 * 60 * 1000;
 /** Cada cuánto se guarda el latido de una tablet (para no escribir en cada petición). */
 const SEEN_EVERY_MS = 60 * 1000;
@@ -27,9 +33,77 @@ const REVOKED_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
 export const hashSecret = (value) => crypto.createHash('sha256').update(String(value)).digest('hex');
 export const newSecret = () => crypto.randomBytes(32).toString('base64url');
 
+const validToken = (value) => (typeof value === 'string' && value.length >= 20 && value.length <= 128 ? value : null);
+
+function readCookie(req, name) {
+  for (const part of String(req.headers.cookie || '').split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0 && part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return null;
+}
+
+/** Token de la tablet: el encabezado X-Device-Token o, si no viene, la cookie de respaldo. */
 export function readDeviceToken(req) {
-  const value = req.headers[DEVICE_HEADER];
-  return typeof value === 'string' && value.length >= 20 && value.length <= 128 ? value : null;
+  return validToken(req.headers[DEVICE_HEADER]) ?? validToken(readCookie(req, DEVICE_COOKIE));
+}
+
+/** ¿El token llegó solo por la cookie? (la tablet perdió su almacenamiento). */
+export function tokenFromCookieOnly(req) {
+  return !validToken(req.headers[DEVICE_HEADER]) && !!validToken(readCookie(req, DEVICE_COOKIE));
+}
+
+export function setDeviceCookie(req, res, token) {
+  const parts = [`${DEVICE_COOKIE}=${encodeURIComponent(token)}`, 'Path=/', `Max-Age=${DEVICE_COOKIE_MAX_AGE_S}`, 'HttpOnly', 'SameSite=Lax'];
+  if (req.secure) parts.push('Secure');
+  res.append('Set-Cookie', parts.join('; '));
+}
+
+/** Crea la tablet y devuelve su token (una sola vez: en la base queda solo el hash). */
+export function createDevice({ name, branchId, registerId, createdBy, createdByName }, req) {
+  const token = newSecret();
+  const id = db
+    .prepare(
+      `INSERT INTO devices (token_hash, kind, name, branch_id, register_id, created_by, created_by_name, created_at, last_seen_at, last_ip, user_agent)
+       VALUES (?, 'kiosk', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      hashSecret(token),
+      name,
+      branchId,
+      registerId,
+      createdBy ?? null,
+      createdByName ?? null,
+      now(),
+      req ? now() : null,
+      req ? clientIp(req) || null : null,
+      req ? String(req.headers['user-agent'] || '').slice(0, 300) || null : null
+    ).lastInsertRowid;
+  return { id, token };
+}
+
+/** Le da un token nuevo a una tablet (al recogerlo con el código de 6 dígitos). */
+export function issueDeviceToken(deviceId, req) {
+  const token = newSecret();
+  db.prepare('UPDATE devices SET token_hash = ?, last_seen_at = ?, last_ip = ?, user_agent = ? WHERE id = ?').run(
+    hashSecret(token),
+    now(),
+    clientIp(req) || null,
+    String(req.headers['user-agent'] || '').slice(0, 300) || null,
+    deviceId
+  );
+  return token;
+}
+
+export function notifyPaired(device) {
+  notify({
+    kind: 'devices',
+    tone: 'success',
+    title: 'Tablet de encuestas vinculada',
+    message: `${device.name} ya puede recibir encuestas.`,
+    link: '/app/ajustes/accesos',
+    audience: 'settings.connect',
+  });
 }
 
 export function findDevice(token) {

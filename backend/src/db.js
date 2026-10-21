@@ -243,6 +243,19 @@ export function ensureSeed() {
     );
     CREATE INDEX IF NOT EXISTS idx_devices_revoked ON devices(revoked_at);
 
+    -- Vincular desde la tablet: la app muestra un código de 6 dígitos y el panel lo escribe.
+    -- Solo se guarda el hash del secreto con el que la tablet recoge su token.
+    CREATE TABLE IF NOT EXISTS device_link_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL,
+      secret_hash TEXT UNIQUE NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      device_id INTEGER,
+      claimed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_device_link_code ON device_link_requests(code);
+
     -- Códigos de vinculación del QR: un solo uso y vencen en minutos.
     CREATE TABLE IF NOT EXISTS device_pairings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

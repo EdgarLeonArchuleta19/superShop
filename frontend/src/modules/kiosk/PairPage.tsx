@@ -14,6 +14,19 @@ import { SurveyInstallStep } from './SurveyInstall';
 const isDesktopApp = !!(window as Window & { electronAPI?: unknown }).electronAPI;
 
 /**
+ * Navegador dentro de otra app (lector de QR de la cámara o Google Lens, WhatsApp…): no
+ * comparte datos con Chrome ni permite instalar. Ahí no se usa el código: se abre en Chrome.
+ */
+const inAppBrowser = /FBAN|FBAV|Instagram|Line\/|WhatsApp|GSA\/|; wv\)/i.test(navigator.userAgent);
+const isAndroid = /Android/i.test(navigator.userAgent);
+
+/** Abre esta misma dirección (con el código) en Chrome de Android. */
+function chromeIntentUrl(): string {
+  const { host, pathname, search, protocol } = window.location;
+  return `intent://${host}${pathname}${search}#Intent;scheme=${protocol.replace(':', '')};package=com.android.chrome;end`;
+}
+
+/**
  * Se abre al escanear el QR de "SuperShop Survey" (/encuestas/vincular?codigo=…):
  * cambia el código por el token de la tablet y abre las encuestas.
  */
@@ -28,7 +41,7 @@ export default function PairPage() {
   const started = useRef(false);
 
   useEffect(() => {
-    if (!code || isDesktopApp || started.current) return;
+    if (!code || isDesktopApp || inAppBrowser || started.current) return;
     started.current = true;
     pairDevice(code)
       .then((d) => {
@@ -66,6 +79,19 @@ export default function PairPage() {
           <Message tone="error" title="Este equipo es la computadora principal">
             Escanea el código con la tablet que vas a usar para las encuestas.
           </Message>
+        ) : inAppBrowser ? (
+          <div className="space-y-4">
+            <Message tone="error" title="Ábrelo en el navegador">
+              {isAndroid
+                ? 'Este lector de QR no permite instalar SuperShop Survey. Ábrelo en Chrome para vincular la tablet.'
+                : 'Este lector de QR no permite instalar SuperShop Survey. Toca ••• y elige "Abrir en Safari".'}
+            </Message>
+            {isAndroid && (
+              <a href={chromeIntentUrl()} className="btn-primary h-12 w-full text-[15px]">
+                Abrir en Chrome
+              </a>
+            )}
+          </div>
         ) : error ? (
           <Message tone="error" title="No se pudo vincular">
             {error}

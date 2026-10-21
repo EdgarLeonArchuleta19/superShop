@@ -14,16 +14,36 @@ export function SurveyInstallStep({ onContinue }: { onContinue: () => void }) {
   const [done, setDone] = useState(false);
   // Instalar requiere https: en la red local (http) el navegador no lo permite.
   const canInstall = window.isSecureContext && (platform === 'prompt' || platform === 'android-manual');
+  // iPad/iPhone: se agrega desde Safari, pero la app agregada no comparte datos con Safari:
+  // al abrirla muestra un código para vincularla desde el panel.
+  const ios = window.isSecureContext && platform === 'ios-safari';
 
   useEffect(() => {
     // Recién instalada: se queda el aviso de abrirla desde la pantalla de inicio.
     if (done) return;
     if (platform === 'installed') onContinue();
-    else if (!canInstall) {
+    else if (!canInstall && !ios) {
       const timer = window.setTimeout(onContinue, 1500);
       return () => window.clearTimeout(timer);
     }
   }, [platform, canInstall, done, onContinue]);
+
+  if (ios) {
+    return (
+      <div className="mt-5 space-y-3 text-left">
+        <div className="flex items-center gap-3 rounded-2xl bg-faint p-3.5">
+          <img src={SURVEY_ICON} alt="" className="h-12 w-12 rounded-xl ring-1 ring-line" />
+          <p className="min-w-0 text-[13px] text-ink/80">
+            Para usarla como app: toca <strong>Compartir</strong> → <strong>Agregar a inicio</strong>. Al abrirla te
+            mostrará un código: escríbelo en SuperShop → Vincular dispositivos.
+          </p>
+        </div>
+        <button onClick={onContinue} className="btn-primary h-12 w-full text-[15px]">
+          Seguir aquí en Safari
+        </button>
+      </div>
+    );
+  }
 
   if (!canInstall && !done) return null;
 

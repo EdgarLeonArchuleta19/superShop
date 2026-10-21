@@ -24,6 +24,11 @@ Todas las versiones notables documentadas aquí. Formato basado en [Keep a Chang
   - **Seguridad:** el QR sirve una sola vez, vence en 5 minutos y se renueva solo mientras la pantalla está abierta. La tablet recibe un token propio que solo sirve para enviar encuestas; el servidor guarda la tienda y la caja de la tablet aunque el envío diga otra cosa.
   - **Sin salida:** la tablet no tiene botón "Salir" ni acceso al panel. Solo se cambia desvinculándola desde el panel.
   - **Se instala aparte** como "SuperShop Survey", a pantalla completa y con el logo blanco de SuperShop.
+- **La tablet queda vinculada para siempre, también como app instalada:**
+  - **Código en la tablet (como WhatsApp Web):** si SuperShop Survey abre sin vincular, muestra un código de 6 dígitos. Se escribe en Vincular dispositivos → SuperShop Survey y la app queda vinculada sola. Resuelve el caso en que el QR se abrió en otro navegador (lector de QR de la cámara, Google Lens) y la app instalada no lo veía.
+  - **Cookie de respaldo:** además del token, la tablet guarda una cookie de 400 días que se renueva con cada latido. Si se borra el almacenamiento, se reconoce sola.
+  - **Lector de QR interno:** si el QR se abre dentro de otra app, no gasta el código y ofrece "Abrir en Chrome" (en iPhone/iPad, "Abrir en Safari").
+  - **iPad/iPhone:** se explica cómo agregarla a inicio; la app agregada se vincula con el código.
 - **Dos apps instalables (PWA) de verdad:**
   - **Entradas:** `index.html` es **SuperShop** (logo azul) y `encuestas.html` es **SuperShop Survey** (logo blanco). Cada una tiene su manifiesto, ícono y nombre desde que carga, también sin conexión.
   - **Instalación:** al vincular una tablet aparece el botón **Instalar SuperShop Survey**. La app instalada abre directo en las encuestas, a pantalla completa.

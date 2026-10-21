@@ -101,6 +101,11 @@ No hay suite de tests automatizados. Para validar un cambio: `npm run typecheck`
   - **Token:** la tablet lo manda en `X-Device-Token`. Solo sirve para `/api/surveys/batch` y `/api/device/heartbeat`.
   - **Tienda y caja:** en `saveBatch` se toman de la tablet, no del envío.
   - **Envío de encuestas:** `requireSurveySender` acepta una tablet o cualquier sesión de usuario (para vaciar outbox viejos).
+  - **Cookie de respaldo:** `ss_device` (HttpOnly, 400 días) con el mismo token. `readDeviceToken` la usa si no viene el encabezado, y el latido la renueva y devuelve el token para que la tablet lo vuelva a guardar.
+  - **Vincular con código (`device_link_requests`):**
+    - La tablet pide 6 dígitos (`/api/devices/link-request`) y pregunta con su secreto (`/claim`).
+    - El panel los escribe en `/api/admin/devices/link`.
+    - Así se vincula la app instalada aunque el QR se haya abierto en otro navegador.
 - **Frontend:**
   - **Rutas:** `/encuestas` (`KioskPage`) y `/encuestas/vincular?codigo=` (`PairPage`); el estado vive en `lib/device.ts`.
   - **Panel:** `modules/settings/DevicesSection.tsx` tiene el QR (`SurveyPairingCard`, en Vincular dispositivos) y el modal `EditKioskModal`. La lista de tablets está en la tabla de dispositivos de `AccessLogPage.tsx` (`/api/admin/access-log/online`).

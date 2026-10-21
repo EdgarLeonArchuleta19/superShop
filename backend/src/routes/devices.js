@@ -1,15 +1,20 @@
 import { Router } from 'express';
 import { db, now } from '../db.js';
 import { requireAdmin, requirePermission } from '../middleware.js';
-import { notify } from '../notifications.js';
-import { clientIp } from '../security.js';
+import crypto from 'node:crypto';
 import {
+  createDevice,
   findDevice,
   hashSecret,
+  issueDeviceToken,
   newSecret,
+  notifyPaired,
   PAIRING_TTL_MS,
   publicDevice,
+  readDeviceToken,
   requireDevice,
+  setDeviceCookie,
+  tokenFromCookieOnly,
   touchDevice,
 } from '../devices.js';
 
@@ -64,43 +69,74 @@ router.post('/devices/pair', (req, res) => {
     db.prepare('UPDATE devices SET revoked_at = ? WHERE id = ?').run(now(), previous.id);
   }
 
-  const token = newSecret();
-  const id = db
-    .prepare(
-      `INSERT INTO devices (token_hash, kind, name, branch_id, register_id, created_by, created_by_name, created_at, last_seen_at, last_ip, user_agent)
-       VALUES (?, 'kiosk', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      hashSecret(token),
-      pairing.name,
-      pairing.branch_id,
-      pairing.register_id,
-      pairing.created_by,
-      pairing.created_by_name,
-      now(),
-      now(),
-      clientIp(req) || null,
-      String(req.headers['user-agent'] || '').slice(0, 300) || null
-    ).lastInsertRowid;
+  const { id, token } = createDevice(
+    {
+      name: pairing.name,
+      branchId: pairing.branch_id,
+      registerId: pairing.register_id,
+      createdBy: pairing.created_by,
+      createdByName: pairing.created_by_name,
+    },
+    req
+  );
   db.prepare('UPDATE device_pairings SET device_id = ? WHERE id = ?').run(id, pairing.id);
 
   const device = publicDevice(id);
-  notify({
-    kind: 'devices',
-    tone: 'success',
-    title: 'Tablet de encuestas vinculada',
-    message: `${device.name} ya puede recibir encuestas.`,
-    link: '/app/ajustes/conectar',
-    audience: 'settings.connect',
-  });
+  notifyPaired(device);
+  setDeviceCookie(req, res, token);
   res.status(201).json({ token, device });
+});
+
+// ---------------------------------------------------------------------------
+// Vincular con el código de 6 dígitos que muestra la tablet
+// ---------------------------------------------------------------------------
+
+const LINK_TTL_MS = 10 * 60 * 1000;
+
+/** La tablet pide un código para mostrarlo en pantalla. */
+router.post('/devices/link-request', (req, res) => {
+  db.prepare('DELETE FROM device_link_requests WHERE expires_at < ?').run(new Date(Date.now() - 24 * 3600 * 1000).toISOString());
+  const active = db.prepare('SELECT id FROM device_link_requests WHERE code = ? AND device_id IS NULL AND expires_at > ?');
+  let code = null;
+  for (let i = 0; i < 20 && !code; i++) {
+    const candidate = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
+    if (!active.get(candidate, now())) code = candidate;
+  }
+  if (!code) return res.status(503).json({ error: 'Intenta de nuevo en un momento' });
+  const secret = newSecret();
+  db.prepare('INSERT INTO device_link_requests (code, secret_hash, created_at, expires_at) VALUES (?, ?, ?, ?)').run(
+    code,
+    hashSecret(secret),
+    now(),
+    new Date(Date.now() + LINK_TTL_MS).toISOString()
+  );
+  res.status(201).json({ code, secret, ttl_ms: LINK_TTL_MS });
+});
+
+/** La tablet pregunta si ya escribieron su código en el panel; si sí, recoge su token. */
+router.post('/devices/link-request/claim', (req, res) => {
+  const secret = typeof req.body?.secret === 'string' ? req.body.secret : '';
+  const row = secret ? db.prepare('SELECT * FROM device_link_requests WHERE secret_hash = ?').get(hashSecret(secret)) : null;
+  if (!row || row.claimed_at) return res.json({ status: 'expired' });
+  if (!row.device_id) return res.json({ status: Date.parse(row.expires_at) < Date.now() ? 'expired' : 'pending' });
+  const taken = db
+    .prepare('UPDATE device_link_requests SET claimed_at = ? WHERE id = ? AND claimed_at IS NULL')
+    .run(now(), row.id).changes;
+  if (!taken) return res.json({ status: 'expired' });
+  const token = issueDeviceToken(row.device_id, req);
+  setDeviceCookie(req, res, token);
+  res.json({ status: 'linked', token, device: publicDevice(row.device_id) });
 });
 
 /** Latido de la tablet: confirma que sigue vinculada y devuelve su tienda y caja actuales. */
 router.post('/device/heartbeat', requireDevice, (req, res) => {
   const pending = Number(req.body?.pending);
   touchDevice(req.device, req, Number.isInteger(pending) ? pending : undefined);
-  res.json({ device: publicDevice(req.device.id) });
+  // La cookie se renueva en cada latido. Si la tablet se reconoció solo por la cookie (perdió
+  // su almacenamiento), se le devuelve su token para que lo vuelva a guardar.
+  const token = readDeviceToken(req);
+  setDeviceCookie(req, res, token);
+  res.json({ device: publicDevice(req.device.id), ...(tokenFromCookieOnly(req) ? { token } : {}) });
 });
 
 // ---------------------------------------------------------------------------
@@ -121,6 +157,35 @@ router.get('/admin/devices', canConnect, (req, res) => {
     .all();
 
   res.json({ devices });
+});
+
+/** Vincular la tablet que muestra un código de 6 dígitos (la app instalada, por ejemplo). */
+router.post('/admin/devices/link', canConnect, (req, res) => {
+  const code = String(req.body?.code ?? '').replace(/\D/g, '');
+  if (code.length !== 6) return res.status(400).json({ error: 'Escribe los 6 dígitos que muestra la tablet' });
+  const place = checkPlace(req.body?.branch_id, req.body?.register_id);
+  if (place.error) return res.status(400).json({ error: place.error });
+  const request = db
+    .prepare('SELECT * FROM device_link_requests WHERE code = ? AND device_id IS NULL AND expires_at > ? ORDER BY id DESC')
+    .get(code, now());
+  if (!request) return res.status(404).json({ error: 'Ese código no existe o ya venció. Revisa el que muestra la tablet.' });
+  const name = cleanName(req.body?.name) || `${place.register.name} · ${place.branch.name}`;
+  const user = db.prepare('SELECT name FROM users WHERE id = ?').get(req.session.user_id);
+  // La tablet recoge su token con su propio secreto (link-request/claim): aquí no se entrega.
+  const { id } = createDevice(
+    { name, branchId: place.branch.id, registerId: place.register.id, createdBy: req.session.user_id, createdByName: user?.name ?? null },
+    null
+  );
+  const linked = db
+    .prepare('UPDATE device_link_requests SET device_id = ? WHERE id = ? AND device_id IS NULL')
+    .run(id, request.id).changes;
+  if (!linked) {
+    db.prepare('DELETE FROM devices WHERE id = ?').run(id);
+    return res.status(409).json({ error: 'Ese código ya se usó' });
+  }
+  const device = publicDevice(id);
+  notifyPaired(device);
+  res.status(201).json({ device });
 });
 
 /** Código para el QR de "SuperShop Survey". */

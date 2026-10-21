@@ -26,7 +26,7 @@ import {
   SURVEY_COOLDOWN_MS,
 } from './kioskTypes';
 import { QUESTIONS, isExclusiveOption } from '../../lib/questions';
-import { ThemeToggleButton } from '../../components/Modal';
+import { Spinner, ThemeToggleButton } from '../../components/Modal';
 import { IconCloudCheck, IconCloudOff } from '../../components/Icons';
 import QuestionScreen from './screens/QuestionScreen';
 import FacesScreen from './screens/FacesScreen';
@@ -215,6 +215,13 @@ export default function KioskPage() {
         : 'Encuestas'
       : `${session.register.name} · ${session.branch.name}`;
 
+  if (status === 'checking') {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-canvas">
+        <Spinner className="h-8 w-8 text-brand-600" />
+      </div>
+    );
+  }
   if (status !== 'paired') return <DeviceNotice status={status} pending={pending} />;
   if (!branch || !register) return <DeviceNotice status="no-place" pending={pending} />;
 

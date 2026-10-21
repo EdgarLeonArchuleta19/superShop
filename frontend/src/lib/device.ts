@@ -15,8 +15,12 @@ export interface DeviceInfo {
   register: { id: number; name: string } | null;
 }
 
-/** 'paired' vinculada · 'revoked' la desvincularon desde el panel · 'unpaired' nunca se vinculó. */
-export type DeviceStatus = 'paired' | 'revoked' | 'unpaired';
+/**
+ * 'paired' vinculada · 'revoked' la desvincularon desde el panel · 'unpaired' no está
+ * vinculada · 'checking' sin token guardado: se pregunta al servidor si la reconoce por
+ * su cookie de respaldo.
+ */
+export type DeviceStatus = 'paired' | 'revoked' | 'unpaired' | 'checking';
 
 const INFO_KEY = 'supershop.device.info';
 const HEARTBEAT_MS = 2 * 60 * 1000;
@@ -43,15 +47,36 @@ export function isPairedDevice(): boolean {
   return !!getDeviceToken();
 }
 
+/** Guarda la vinculación y pide al navegador que no borre este almacenamiento. */
+function adoptDevice(token: string, device: DeviceInfo): void {
+  setDeviceToken(token);
+  writeInfo(device);
+  void navigator.storage?.persist?.().catch(() => undefined);
+}
+
 /** Cambia el código del QR por el token de la tablet. Reemplaza una vinculación anterior. */
 export async function pairDevice(code: string): Promise<DeviceInfo> {
   const res = await api<{ token: string; device: DeviceInfo }>('/api/devices/pair', {
     method: 'POST',
     body: { code, previous_token: getDeviceToken() },
   });
-  setDeviceToken(res.token);
-  writeInfo(res.device);
+  adoptDevice(res.token, res.device);
   return res.device;
+}
+
+/** Código de 6 dígitos que la tablet muestra para que la vinculen desde el panel. */
+export async function requestLinkCode(): Promise<{ code: string; secret: string; ttl_ms: number }> {
+  return api('/api/devices/link-request', { method: 'POST', body: {} });
+}
+
+/** ¿Ya escribieron el código en el panel? Si sí, la tablet queda vinculada. */
+export async function claimLink(secret: string): Promise<'pending' | 'expired' | 'linked'> {
+  const res = await api<{ status: 'pending' | 'expired' | 'linked'; token?: string; device?: DeviceInfo }>(
+    '/api/devices/link-request/claim',
+    { method: 'POST', body: { secret }, timeoutMs: 15_000 }
+  );
+  if (res.status === 'linked' && res.token && res.device) adoptDevice(res.token, res.device);
+  return res.status;
 }
 
 /** Deja de usar este equipo como tablet de encuestas (solo después de que la desvincularon). */
@@ -67,23 +92,29 @@ export function forgetDevice(): void {
  */
 export function useKioskDevice(): { status: DeviceStatus; device: DeviceInfo | null } {
   const [device, setDevice] = useState<DeviceInfo | null>(() => (getDeviceToken() ? readInfo() : null));
-  const [status, setStatus] = useState<DeviceStatus>(() => (getDeviceToken() ? 'paired' : 'unpaired'));
+  const [status, setStatus] = useState<DeviceStatus>(() => (getDeviceToken() ? 'paired' : 'checking'));
 
   const beat = useCallback(async () => {
-    if (!getDeviceToken()) return;
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    const hadToken = !!getDeviceToken();
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      if (!hadToken) setStatus('unpaired');
+      return;
+    }
     try {
-      const res = await api<{ device: DeviceInfo }>('/api/device/heartbeat', {
+      // Sin token guardado, el servidor la reconoce por la cookie de respaldo y lo devuelve.
+      const res = await api<{ device: DeviceInfo; token?: string }>('/api/device/heartbeat', {
         method: 'POST',
         body: { pending: getPendingCount() },
         timeoutMs: 15_000,
       });
-      writeInfo(res.device);
+      if (res.token) adoptDevice(res.token, res.device);
+      else writeInfo(res.device);
       setDevice(res.device);
       setStatus('paired');
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) setStatus('revoked');
-      // Sin conexión u otro error: se sigue con lo último que se supo.
+      if (err instanceof ApiError && err.status === 401) setStatus(hadToken ? 'revoked' : 'unpaired');
+      else if (!hadToken) setStatus('unpaired');
+      // Con token y sin conexión u otro error: se sigue con lo último que se supo.
     }
   }, []);
 

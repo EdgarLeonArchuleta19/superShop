@@ -177,6 +177,9 @@ export function accessGate(req, res, next) {
   const given = typeof req.query?.[ACCESS_PARAM] === 'string' ? req.query[ACCESS_PARAM] : null;
   if (given && same(given, c.key)) {
     grantAccess(req, res, c.key);
+    // Vincular tablet: se deja la clave en la dirección por si hay que abrirla en otro
+    // navegador ("Abrir en Chrome" desde el lector de QR), que no tiene esta cookie.
+    if (req.path.startsWith('/encuestas/vincular')) return next();
     const url = new URL(req.originalUrl, 'http://x');
     url.searchParams.delete(ACCESS_PARAM);
     res.setHeader('Cache-Control', 'no-store');

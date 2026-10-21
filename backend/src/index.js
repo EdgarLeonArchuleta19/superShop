@@ -128,6 +128,7 @@ const batchLimiter = rateLimit({
 
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/devices/pair', loginLimiter);
+app.use('/api/devices/link-request', (req, res, next) => (req.path === '/' ? loginLimiter(req, res, next) : next()));
 app.use('/api/surveys/batch', batchLimiter);
 
 if (process.env.NODE_ENV === 'production') {

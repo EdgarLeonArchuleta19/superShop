@@ -291,6 +291,7 @@ async function buildZip(destPath) {
       snap.prepare('DELETE FROM sessions').run();
       snap.prepare('DELETE FROM login_failures').run();
       snap.prepare('DELETE FROM device_pairings').run();
+      snap.prepare('DELETE FROM device_link_requests').run();
       snap
         .prepare('UPDATE settings SET backup_google_drive_tokens = NULL, backup_drive_email = NULL, tunnel_token = NULL, access_key = NULL')
         .run();

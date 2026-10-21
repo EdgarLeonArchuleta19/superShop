@@ -46,7 +46,7 @@ function detectPlatform(): InstallPlatform {
     window.matchMedia('(display-mode: standalone)').matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true;
   if (standalone || justInstalled) return 'installed';
-  if (/FBAN|FBAV|Instagram|Line\/|WhatsApp|; wv\)/i.test(ua)) return 'in-app';
+  if (/FBAN|FBAV|Instagram|Line\/|WhatsApp|GSA\/|; wv\)/i.test(ua)) return 'in-app';
   const ios = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
   if (ios) return /CriOS|FxiOS|EdgiOS|OPiOS/.test(ua) ? 'ios-other' : 'ios-safari';
   if (deferredPrompt) return 'prompt';
