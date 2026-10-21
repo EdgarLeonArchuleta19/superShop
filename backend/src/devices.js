@@ -261,9 +261,16 @@ export function requireSurveySender(req, res, next) {
   return res.status(401).json({ error: 'Este dispositivo no está vinculado', revoked: !!device });
 }
 
-/** Encuestas que acepta una tablet desvinculada: solo las respondidas antes de desvincularla. */
+/**
+ * Encuestas que acepta una tablet desvinculada: solo las respondidas mientras estuvo
+ * vinculada (entre que se vinculó y que la desvincularon).
+ */
 export function acceptedFromDevice(device, item) {
   if (!device.revoked_at) return true;
   const answered = Date.parse(item.client_ts || item.created_at || '');
-  return Number.isFinite(answered) && answered <= Date.parse(device.revoked_at);
+  return (
+    Number.isFinite(answered) &&
+    answered >= Date.parse(device.created_at) &&
+    answered <= Date.parse(device.revoked_at)
+  );
 }

@@ -50,8 +50,22 @@ function StepList({ steps }: { steps: Step[] }) {
   );
 }
 
-export default function InstallPage() {
-  const { platform, install } = useInstall();
+/** Las dos apps instalables: SuperShop (logo azul) y SuperShop Survey (logo blanco, tablets). */
+const APPS = {
+  admin: { name: 'SuperShop', icon: '/icon-512.png', iconClass: 'ring-black/5' },
+  survey: { name: 'SuperShop Survey', icon: '/survey-icon-512.png', iconClass: 'ring-line' },
+} as const;
+
+/**
+ * Cómo instalar la app en este equipo. `app="survey"` se muestra después de vincular una
+ * tablet: "Seguir sin instalar" (onContinue) abre las encuestas en el navegador.
+ */
+export default function InstallPage({ app = 'admin', onContinue }: { app?: keyof typeof APPS; onContinue?: () => void }) {
+  const { name, icon, iconClass } = APPS[app];
+  const survey = app === 'survey';
+  const { platform: detected, install } = useInstall();
+  // Instalar requiere https: en la red local (http) ningún navegador lo permite.
+  const platform = !window.isSecureContext && detected !== 'installed' ? 'insecure' : detected;
   const toast = useToast();
   const [installing, setInstalling] = useState(false);
 
@@ -80,13 +94,26 @@ export default function InstallPage() {
         <div className="space-y-4 text-center">
           <p className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-[15px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
             <IconCheck className="h-5 w-5" />
-            SuperShop ya está instalada
+            {name} ya está instalada
           </p>
           <p className="text-[14px] text-muted">Búscala en tu pantalla de inicio con este ícono.</p>
-          <Link to="/login" className="btn-primary h-14 w-full text-[16px]">
-            Abrir SuperShop
-          </Link>
+          {survey ? (
+            <button onClick={onContinue} className="btn-soft h-12 w-full text-[15px]">
+              Seguir aquí en el navegador
+            </button>
+          ) : (
+            <Link to="/login" className="btn-primary h-14 w-full text-[16px]">
+              Abrir SuperShop
+            </Link>
+          )}
         </div>
+      );
+      break;
+    case 'insecure':
+      body = (
+        <p className="rounded-2xl bg-faint p-4 text-center text-[15px] leading-snug text-ink/80">
+          En la red local (sin https) el navegador no permite instalar la app. Puedes usarla aquí en el navegador.
+        </p>
       );
       break;
     case 'prompt':
@@ -166,7 +193,7 @@ export default function InstallPage() {
       body = (
         <div className="space-y-4">
           <p className="rounded-2xl bg-amber-50 p-4 text-[15px] leading-snug text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">
-            Este enlace se abrió dentro de otra app. Para instalar SuperShop ábrelo en el navegador: toca{' '}
+            Este enlace se abrió dentro de otra app. Para instalar {name} ábrelo en el navegador: toca{' '}
             <strong>•••</strong> y elige <strong>Abrir en el navegador</strong> (o en Safari / Chrome).
           </p>
           <button onClick={() => void copyLink()} className="btn-soft h-12 w-full text-[15px]">
@@ -223,29 +250,42 @@ export default function InstallPage() {
     <div className="min-h-dvh bg-canvas px-5 py-10 text-ink">
       <div className="mx-auto flex w-full max-w-sm flex-col items-center">
         {/* El ícono tal como se verá en la pantalla de inicio */}
-        <img
-          src="/icon-512.png"
-          alt="Ícono de SuperShop"
-          className="h-24 w-24 rounded-[22px] shadow-pop ring-1 ring-black/5"
-        />
-        <p className="mt-2 text-[13px] font-medium text-muted">SuperShop</p>
+        <img src={icon} alt={`Ícono de ${name}`} className={`h-24 w-24 rounded-[22px] shadow-pop ring-1 ${iconClass}`} />
+        <p className="mt-2 text-[13px] font-medium text-muted">{name}</p>
 
         <h1 className="mt-6 text-center text-[26px] font-bold tracking-tight">
-          {platform === 'installed' ? '¡Todo listo!' : 'Instala SuperShop'}
+          {platform === 'installed' ? '¡Todo listo!' : `Instala ${name}`}
         </h1>
         {platform !== 'installed' && (
           <p className="mt-1.5 text-center text-[15px] text-muted">
-            Tenla en tu pantalla de inicio y ábrela como cualquier app.
+            {survey
+              ? 'Tablet vinculada. Instálala para abrir las encuestas a pantalla completa, como cualquier app.'
+              : 'Tenla en tu pantalla de inicio y ábrela como cualquier app.'}
           </p>
         )}
 
         <div className="mt-7 w-full">{body}</div>
 
-        {platform !== 'installed' && (
-          <Link to="/login" className="mt-8 text-[14px] font-medium text-brand-600 underline-offset-4 hover:underline">
-            Continuar sin instalar
-          </Link>
+        {/* iPad/iPhone: la app agregada a inicio no comparte datos con Safari. */}
+        {survey && (platform === 'ios-safari' || platform === 'ios-other') && (
+          <p className="mt-4 text-center text-[13px] text-muted">
+            Al abrirla desde el inicio te mostrará un código: escríbelo en SuperShop → Vincular dispositivos.
+          </p>
         )}
+
+        {platform !== 'installed' &&
+          (survey ? (
+            <button
+              onClick={onContinue}
+              className="mt-8 text-[14px] font-medium text-brand-600 underline-offset-4 hover:underline"
+            >
+              Seguir sin instalar
+            </button>
+          ) : (
+            <Link to="/login" className="mt-8 text-[14px] font-medium text-brand-600 underline-offset-4 hover:underline">
+              Continuar sin instalar
+            </Link>
+          ))}
       </div>
     </div>
   );

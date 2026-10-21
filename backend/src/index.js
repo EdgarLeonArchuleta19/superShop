@@ -126,9 +126,20 @@ const batchLimiter = rateLimit({
   message: { error: 'Demasiadas solicitudes. Intenta de nuevo en un momento.' },
 });
 
+// Vincular tablets: su propio contador. Si usaran el del inicio de sesión, varias tablets de
+// la tienda (misma IP de internet) dejarían a los administradores sin poder entrar.
+const deviceLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: limiterKey,
+  message: { error: 'Demasiados intentos. Intenta de nuevo en unos minutos.' },
+});
+
 app.use('/api/auth/login', loginLimiter);
-app.use('/api/devices/pair', loginLimiter);
-app.use('/api/devices/link-request', (req, res, next) => (req.path === '/' ? loginLimiter(req, res, next) : next()));
+app.use('/api/devices/pair', deviceLimiter);
+app.use('/api/devices/link-request', (req, res, next) => (req.path === '/' ? deviceLimiter(req, res, next) : next()));
 app.use('/api/surveys/batch', batchLimiter);
 
 if (process.env.NODE_ENV === 'production') {

@@ -8,7 +8,7 @@ import { pairDevice, useSurveyAppManifest } from '../../lib/device';
 import type { DeviceInfo } from '../../lib/device';
 import { useSettings } from '../../lib/settings';
 import { clearDraft, clearKioskState } from './kioskTypes';
-import { SurveyInstallStep } from './SurveyInstall';
+import InstallPage from '../install/InstallPage';
 
 /** La app de escritorio es la computadora principal: no se convierte en tablet de encuestas. */
 const isDesktopApp = !!(window as Window & { electronAPI?: unknown }).electronAPI;
@@ -63,6 +63,8 @@ export default function PairPage() {
   const openSurveys = useCallback(() => navigate('/encuestas', { replace: true }), [navigate]);
 
   if (!code) return <Navigate to="/encuestas" replace />;
+  // Vinculada: cómo instalar SuperShop Survey; "Seguir sin instalar" abre las encuestas aquí.
+  if (device) return <InstallPage app="survey" onContinue={openSurveys} />;
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-canvas px-4 py-10 text-ink">
@@ -96,14 +98,6 @@ export default function PairPage() {
           <Message tone="error" title="No se pudo vincular">
             {error}
           </Message>
-        ) : device ? (
-          <>
-            <Message tone="ok" title="¡Tablet vinculada!">
-              {device.register?.name ?? device.name}
-              {device.branch ? ` · ${device.branch.name}` : ''}.
-            </Message>
-            <SurveyInstallStep onContinue={openSurveys} />
-          </>
         ) : (
           <div className="flex flex-col items-center gap-3 py-4">
             <Spinner className="h-8 w-8 text-brand-600" />

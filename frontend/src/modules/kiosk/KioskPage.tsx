@@ -237,7 +237,7 @@ export default function KioskPage() {
             className="h-9 w-9 rounded-xl ring-1 ring-line"
           />
           <div className="leading-tight">
-            <p className="text-sm font-semibold tracking-tight">{settings.store_name}</p>
+            <p className="text-sm font-semibold tracking-tight">SuperShop Survey</p>
             <p className="hidden text-[11px] text-muted sm:block">{subtitle}</p>
           </div>
         </div>

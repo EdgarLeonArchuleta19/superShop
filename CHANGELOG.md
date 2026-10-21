@@ -6,6 +6,10 @@ Todas las versiones notables documentadas aquí. Formato basado en [Keep a Chang
 
 ## [Sin publicar]
 
+### 🔒 Seguridad
+- **El login ya no se bloquea por las tablets:** vincular tablets (QR y código) usaba el mismo límite de intentos que el inicio de sesión. Varias tablets de la tienda (misma IP de internet) podían dejar a los administradores sin poder entrar. Ahora tienen su propio límite.
+- **Encuestas de tablets desvinculadas:** solo se aceptan las respondidas mientras estuvo vinculada, para que una tablet robada no mande encuestas con fechas inventadas.
+
 ### ⚠️ Cambios importantes
 - **Se quitó "Mi encuesta" del menú** y el permiso del mismo nombre: las encuestas ahora se responden solo en tablets vinculadas. `/mi-encuesta` lleva a `/encuestas`.
 - **Al actualizar se cierran todas las sesiones abiertas** (una sola vez): cada persona vuelve a iniciar sesión y cada tablet de encuestas se vincula con el QR nuevo. Las encuestas guardadas sin enviar en los equipos se envían al volver a iniciar sesión.
@@ -31,7 +35,8 @@ Todas las versiones notables documentadas aquí. Formato basado en [Keep a Chang
   - **iPad/iPhone:** se explica cómo agregarla a inicio; la app agregada se vincula con el código.
 - **Dos apps instalables (PWA) de verdad:**
   - **Entradas:** `index.html` es **SuperShop** (logo azul) y `encuestas.html` es **SuperShop Survey** (logo blanco). Cada una tiene su manifiesto, ícono y nombre desde que carga, también sin conexión.
-  - **Instalación:** al vincular una tablet aparece el botón **Instalar SuperShop Survey**. La app instalada abre directo en las encuestas, a pantalla completa.
+  - **Instalación:** al vincular una tablet aparece la pantalla **"Instala SuperShop Survey"**, con los pasos según el equipo (igual que la de SuperShop) y **"Seguir sin instalar"** para abrir la encuesta en el navegador. La app instalada abre directo en las encuestas, a pantalla completa.
+  - **Barra del kiosko:** dice "SuperShop Survey", con la caja y la tienda.
   - **Corrección:** antes, el build agregaba el manifiesto azul también en las encuestas y el navegador podía instalar la app equivocada.
 - **Logo y nombre propios para las tablets:** **SuperShop** (logo de fondo azul) sigue igual para administrar y **SuperShop Survey** (logo blanco) para las tablets de encuestas. Cada QR de Vincular dispositivos lleva su logo al centro.
 - **Avisos de tablets** (notificaciones para quien tiene Vincular dispositivos):
