@@ -68,9 +68,26 @@ function dayBound(value, time) {
   return Number.isNaN(d.getTime()) ? s : d.toISOString();
 }
 
-export function localDate(iso) {
+export function localDate(iso, tz) {
   if (!iso) return '';
   const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  if (tz && typeof tz === 'string') {
+    try {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).formatToParts(d);
+      const y = parts.find((p) => p.type === 'year')?.value;
+      const m = parts.find((p) => p.type === 'month')?.value;
+      const day = parts.find((p) => p.type === 'day')?.value;
+      if (y && m && day) return `${y}-${m}-${day}`;
+    } catch {
+      // Si la zona horaria no es válida, usa la hora local del servidor.
+    }
+  }
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');

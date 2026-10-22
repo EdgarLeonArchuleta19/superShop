@@ -96,6 +96,10 @@ Todas las versiones notables documentadas aquí. Formato basado en [Keep a Chang
 - Información de la tienda: sin logo se muestran las iniciales de la tienda (también en el kiosko y en el PDF), con vista previa de cómo se verá en los reportes.
 
 ### 🐛 Corregido
+- **Tendencia diaria y estadísticas de encuestas:**
+  - **Las encuestas "Sin respuesta" no salían en Tendencia diaria ni en Rendimiento:** el backend no sumaba `none` por día ni por caja/sucursal, y la gráfica solo dibujaba Buena, Regular y Mala. Ahora se incluyen y se muestran en gris ("Sin respuesta") en Tendencia diaria, Rendimiento y en el resumen de los PDF.
+  - **Día exacto en que se contestaron:** la tendencia diaria ahora agrupa usando la zona horaria del navegador (`tz`), evitando que en el servidor web (UTC) las encuestas de la tarde/noche aparezcan en el día siguiente.
+  - **Detalle por día:** el eje X muestra las etiquetas de cada día contestado sin saltarlas innecesariamente, el tooltip muestra la fecha y el total del día (sin la hora ficticia `12:00 p.m.`), y el redondeo superior aplica al tope de toda la barra apilada.
 - **Se perdían las encuestas en las que no tocaban ninguna carita**: a los 5 segundos el kiosko las envía sin calificación y el servidor las rechazaba como inválidas.
   - Ahora se guardan como **"Sin respuesta"**: en la base `rating = 'none'`, y la API la entrega como `null`.
   - Se muestran así en Respuestas, en la gráfica de caritas (porción gris) y en Excel/PDF.

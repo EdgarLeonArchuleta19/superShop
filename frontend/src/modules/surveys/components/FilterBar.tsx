@@ -103,5 +103,7 @@ export function filtersQuery(filters: Filters): string {
   });
   if (filters.from) p.set('from', new Date(`${filters.from}T00:00:00`).toISOString());
   if (filters.to) p.set('to', new Date(`${filters.to}T23:59:59.999`).toISOString());
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (tz) p.set('tz', tz);
   return p.toString();
 }

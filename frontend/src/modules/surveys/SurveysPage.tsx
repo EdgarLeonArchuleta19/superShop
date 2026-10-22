@@ -9,7 +9,7 @@ import Pagination from '../../components/Pagination';
 import { Spinner } from '../../components/Modal';
 import { IconDownload, IconRefresh } from '../../components/Icons';
 import FaceIcon from '../../components/FaceIcon';
-import { isRatingValue, normalizeRating, NO_RATING_LABEL, ratingLabel } from '../../lib/rating';
+import { countRatings, isRatingValue, NO_RATING_LABEL, ratingLabel } from '../../lib/rating';
 
 export default function SurveysPage() {
   const { settings } = useSettings();
@@ -89,14 +89,9 @@ export default function SurveysPage() {
           {
             label: 'Calificaciones',
             value: (() => {
-              const counts = { good: 0, regular: 0, bad: 0 };
-              for (const r of rows) {
-                const v = normalizeRating(r.rating);
-                if (v) counts[v]++;
-              }
-              const total = counts.good + counts.regular + counts.bad;
-              if (!total) return '—';
-              return `Buena: ${counts.good}, Regular: ${counts.regular}, Mala: ${counts.bad}`;
+              if (!rows.length) return '—';
+              const counts = countRatings(rows);
+              return `Buena: ${counts.good}, Regular: ${counts.regular}, Mala: ${counts.bad}, ${NO_RATING_LABEL}: ${counts.none}`;
             })(),
           },
         ],

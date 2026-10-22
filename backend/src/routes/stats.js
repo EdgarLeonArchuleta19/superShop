@@ -16,12 +16,14 @@ router.get('/stats', requirePermission('surveys.stats'), (req, res) => {
 
   const allGoodCount = rows.filter((r) => r.dislikes.includes('Ninguna, todo bien')).length;
 
+  const tz = typeof req.query.tz === 'string' ? req.query.tz : undefined;
   const trendMap = new Map();
   for (const r of rows) {
-    const day = localDate(r.created_at);
-    const entry = trendMap.get(day) || { date: day, count: 0, good: 0, regular: 0, bad: 0 };
+    const day = localDate(r.created_at, tz);
+    if (!day) continue;
+    const entry = trendMap.get(day) || { date: day, count: 0, good: 0, regular: 0, bad: 0, none: 0 };
     entry.count++;
-    if (r.rating in entry) entry[r.rating]++;
+    entry[ratingKey(r.rating)]++;
     trendMap.set(day, entry);
   }
   const trend = [...trendMap.values()].sort((a, b) => a.date.localeCompare(b.date));
@@ -90,9 +92,9 @@ function groupStats(rows, idKey, nameKey) {
   const map = new Map();
   for (const r of rows) {
     const id = r[idKey] ?? null;
-    const entry = map.get(id) || { id, name: r[nameKey] || 'Sin asignar', count: 0, good: 0, regular: 0, bad: 0 };
+    const entry = map.get(id) || { id, name: r[nameKey] || 'Sin asignar', count: 0, good: 0, regular: 0, bad: 0, none: 0 };
     entry.count++;
-    if (r.rating in entry) entry[r.rating]++;
+    entry[ratingKey(r.rating)]++;
     map.set(id, entry);
   }
   return [...map.values()].sort((a, b) => b.count - a.count);

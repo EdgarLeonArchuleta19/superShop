@@ -16,12 +16,20 @@ export const RATING_META: Record<RatingValue, RatingMeta> = {
 };
 
 export const NO_RATING_LABEL = 'Sin respuesta';
+export const NO_RATING_COLOR = '#94a3b8';
+
+export type RatingBucket = RatingValue | 'none';
+
+export const RATING_BUCKETS: { key: RatingBucket; label: string; color: string }[] = [
+  ...RATING_ORDER.map((v) => ({ key: v, label: RATING_META[v].label, color: RATING_META[v].color })),
+  { key: 'none', label: NO_RATING_LABEL, color: NO_RATING_COLOR },
+];
 
 export function isRatingValue(value: unknown): value is RatingValue {
   return value === 'good' || value === 'regular' || value === 'bad';
 }
 
-export function ratingLabel(value: RatingValue | null | undefined): string {
+export function ratingLabel(value: RatingValue | 'none' | null | undefined): string {
   return isRatingValue(value) ? RATING_META[value].label : NO_RATING_LABEL;
 }
 

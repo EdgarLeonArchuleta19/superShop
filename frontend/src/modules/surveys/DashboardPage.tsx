@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import {
   Bar,
   BarChart,
+  BarStack,
   CartesianGrid,
   Cell,
   Legend,
@@ -16,7 +17,7 @@ import {
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useTheme } from '../../lib/theme';
-import { fmtDay, fmtDateTime } from '../../lib/format';
+import { fmtDate, fmtDay, fmtDateTime } from '../../lib/format';
 import { exportExcel, exportPdf } from '../../lib/export';
 import { useSettings } from '../../lib/settings';
 import type {
@@ -36,8 +37,7 @@ import { IconDownload, IconRefresh } from '../../components/Icons';
 import FaceIcon from '../../components/FaceIcon';
 import {
   NO_RATING_LABEL,
-  RATING_META,
-  RATING_ORDER,
+  RATING_BUCKETS,
   isRatingValue,
   ratingLabel,
 } from '../../lib/rating';
@@ -144,15 +144,11 @@ function HorizontalBars({ items, color = BRAND }: { items: LabeledCount[]; color
 
 function CaritasPie({ counts }: { counts: RatingCounts }) {
   const { tooltipStyle } = useChartTheme();
-  const data = [
-    ...RATING_ORDER.map((v) => ({
-      name: RATING_META[v].label,
-      value: counts[v],
-      color: RATING_META[v].color,
-    })),
-    // No tocaron ninguna carita (contestaron la pregunta anterior).
-    { name: NO_RATING_LABEL, value: counts.none, color: '#94a3b8' },
-  ].filter((d) => d.value > 0);
+  const data = RATING_BUCKETS.map((b) => ({
+    name: b.label,
+    value: counts[b.key] ?? 0,
+    color: b.color,
+  })).filter((d) => d.value > 0);
   if (!data.length) {
     return <p className="py-8 text-center text-sm text-muted">Sin calificaciones en este rango.</p>;
   }
@@ -201,16 +197,16 @@ function MiniRankingCaritas({ items }: { items: GroupStats[] }) {
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-hairline">
               <div className="flex h-full">
-                {RATING_ORDER.map((v) => {
-                  const c = item[v];
+                {RATING_BUCKETS.map((b) => {
+                  const c = item[b.key] ?? 0;
                   if (!c) return null;
                   const w = Math.max((c / total) * 100, 2);
                   return (
                     <div
-                      key={v}
-                      title={`${RATING_META[v].label}: ${c}`}
+                      key={b.key}
+                      title={`${b.label}: ${c}`}
                       className="h-full"
-                      style={{ width: `${w}%`, backgroundColor: RATING_META[v].color }}
+                      style={{ width: `${w}%`, backgroundColor: b.color }}
                     />
                   );
                 })}
@@ -375,6 +371,7 @@ export default function DashboardPage() {
               { label: 'Buenas', value: String(stats.ratingCounts.good) },
               { label: 'Regulares', value: String(stats.ratingCounts.regular) },
               { label: 'Malas', value: String(stats.ratingCounts.bad) },
+              { label: NO_RATING_LABEL, value: String(stats.ratingCounts.none ?? 0) },
             ]
           : [],
       });
@@ -496,9 +493,9 @@ export default function DashboardPage() {
               <CaritasPie counts={stats.ratingCounts} />
             </Panel>
 
-            <Panel title="Tendencia diaria" subtitle="Encuestas por carita" className="lg:col-span-2">
+            <Panel title="Tendencia diaria" subtitle="Encuestas contestadas por día" className="lg:col-span-2">
               <ResponsiveContainer width="100%" height={190}>
-                <BarChart data={stats.trend} margin={{ top: 0, right: 4, left: -22, bottom: 0 }}>
+                <BarChart data={stats.trend} margin={{ top: 4, right: 4, left: -22, bottom: 0 }}>
                   <CartesianGrid stroke={gridColor} strokeDasharray="3 3" vertical={false} />
                   <XAxis
                     dataKey="date"
@@ -506,7 +503,8 @@ export default function DashboardPage() {
                     tick={{ fill: axisColor, fontSize: 10 }}
                     axisLine={false}
                     tickLine={false}
-                    minTickGap={28}
+                    interval={stats.trend.length <= 12 ? 0 : 'preserveStartEnd'}
+                    minTickGap={6}
                   />
                   <YAxis
                     allowDecimals={false}
@@ -516,27 +514,40 @@ export default function DashboardPage() {
                   />
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    labelFormatter={(v) => fmtDateTime(`${String(v)}T12:00:00`)}
-                    formatter={(value, name) => [
-                      `${value} encuestas`,
-                      isRatingValue(name) ? ratingLabel(name) : String(name),
-                    ]}
+                    labelFormatter={(v, payload) => {
+                      const dayLabel = fmtDate(`${String(v)}T12:00:00`);
+                      const totalDay = payload?.[0]?.payload?.count;
+                      return typeof totalDay === 'number'
+                        ? `${dayLabel} · ${totalDay} ${totalDay === 1 ? 'encuesta' : 'encuestas'}`
+                        : dayLabel;
+                    }}
+                    formatter={(value, name) => {
+                      const n = Number(value) || 0;
+                      const bucket = RATING_BUCKETS.find((b) => b.key === name);
+                      return [
+                        `${n} ${n === 1 ? 'encuesta' : 'encuestas'}`,
+                        bucket ? bucket.label : String(name),
+                      ];
+                    }}
                   />
                   <Legend
-                    formatter={(value) => (isRatingValue(value) ? ratingLabel(value) : String(value))}
+                    formatter={(value) => {
+                      const bucket = RATING_BUCKETS.find((b) => b.key === value);
+                      return bucket ? bucket.label : String(value);
+                    }}
                     wrapperStyle={{ fontSize: 12 }}
                   />
-                  {RATING_ORDER.map((v) => (
-                    <Bar
-                      key={v}
-                      dataKey={v}
-                      name={v}
-                      stackId="caritas"
-                      fill={RATING_META[v].color}
-                      radius={v === 'good' ? [6, 6, 0, 0] : undefined}
-                      maxBarSize={18}
-                    />
-                  ))}
+                  <BarStack radius={[6, 6, 0, 0]}>
+                    {RATING_BUCKETS.map((b) => (
+                      <Bar
+                        key={b.key}
+                        dataKey={b.key}
+                        name={b.key}
+                        fill={b.color}
+                        maxBarSize={22}
+                      />
+                    ))}
+                  </BarStack>
                 </BarChart>
               </ResponsiveContainer>
             </Panel>

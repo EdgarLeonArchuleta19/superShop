@@ -46,6 +46,7 @@ export interface GroupStats {
   good: number;
   regular: number;
   bad: number;
+  none: number;
 }
 
 export interface AuthUser {
@@ -126,7 +127,7 @@ export interface StatsResponse {
   areas: LabeledCount[];
   dislikes: LabeledCount[];
   likes: LabeledCount[];
-  trend: { date: string; count: number; good: number; regular: number; bad: number }[];
+  trend: { date: string; count: number; good: number; regular: number; bad: number; none: number }[];
   byRegister: GroupStats[];
   byCashier: GroupStats[];
   byBranch: GroupStats[];
